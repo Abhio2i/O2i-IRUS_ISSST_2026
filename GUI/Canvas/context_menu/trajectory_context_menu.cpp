@@ -9,6 +9,26 @@ TrajectoryContextMenu::TrajectoryContextMenu(QWidget* parent)
     connect(m_editAction, &QAction::triggered, this, [this]() {
         emit editWaypointRequested(m_currentIndex);
     });
+    // ========== Select Pattern ==========
+
+    m_patternMenu = m_menu->addMenu("Select Pattern");
+    auto addPattern = [this](const QString& label) {
+        QAction* act = m_patternMenu->addAction(label);
+        connect(act, &QAction::triggered, this, [this, label]() {
+            emit applyPatternRequested(label);
+        });
+    };
+
+    addPattern("Line");
+    addPattern("Zigzag");
+    addPattern("Circle");
+    addPattern("Spiral");
+    addPattern("Rectangle");
+    addPattern("Oval");
+    addPattern("Ellipse");
+    addPattern("Racecourse");
+    addPattern("Circular");
+
     m_deleteAction = m_menu->addAction("Delete Waypoint");
     connect(m_deleteAction, &QAction::triggered, this, [this]() {
         emit deleteWaypointRequested(m_currentIndex);

@@ -4108,12 +4108,12 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
             targetSensorIDs.insert(sdata.id);
     }
 
-    qDebug()
-        << "\n========== RESTORE SENSORS =========="
-        << "\nFrame =" << payload->frameIndex
-        << "\nTarget sensors =" << targetSensorIDs.size()
-        << "\nGlobal sensors ="
-        << static_cast<int>(m_hierarchy->Sensors.size());
+    // qDebug()
+    //     << "\n========== RESTORE SENSORS =========="
+    //     << "\nFrame =" << payload->frameIndex
+    //     << "\nTarget sensors =" << targetSensorIDs.size()
+    //     << "\nGlobal sensors ="
+    //     << static_cast<int>(m_hierarchy->Sensors.size());
 
 
     // ============================================================
@@ -4157,13 +4157,13 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
         if (!platform)
             continue;
 
-        qDebug()
-            << "[REPLAY SENSOR DELETE]"
-            << "Frame =" << payload->frameIndex
-            << "Platform ="
-            << QString::fromStdString(platform->ID)
-            << "Sensor ="
-            << QString::fromStdString(sensorID);
+        // qDebug()
+        //     << "[REPLAY SENSOR DELETE]"
+        //     << "Frame =" << payload->frameIndex
+        //     << "Platform ="
+        //     << QString::fromStdString(platform->ID)
+        //     << "Sensor ="
+        //     << QString::fromStdString(sensorID);
 
 
         // --------------------------------------------------------
@@ -4231,10 +4231,10 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
                 {
                     sensor->fromJson(sdata.state);
 
-                    qDebug()
-                        << "[REPLAY SENSOR UPDATE]"
-                        << "Using index mapping:"
-                        << sdata.id;
+                    // qDebug()
+                    //     << "[REPLAY SENSOR UPDATE]"
+                    //     << "Using index mapping:"
+                    //     << sdata.id;
 
                     continue;
                 }
@@ -4260,10 +4260,10 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
 
         if (parentEntityId.isEmpty())
         {
-            qDebug()
-            << "[REPLAY SENSOR]"
-            << "Missing parent platform:"
-            << sdata.id;
+            // qDebug()
+            // << "[REPLAY SENSOR]"
+            // << "Missing parent platform:"
+            // << sdata.id;
 
             continue;
         }
@@ -4277,12 +4277,12 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
         if (platformIt ==
             m_hierarchy->Platforms.end())
         {
-            qDebug()
-            << "[REPLAY SENSOR]"
-            << "Parent platform not found:"
-            << parentEntityId
-            << "Sensor:"
-            << sdata.id;
+            // qDebug()
+            // << "[REPLAY SENSOR]"
+            // << "Parent platform not found:"
+            // << parentEntityId
+            // << "Sensor:"
+            // << sdata.id;
 
             continue;
         }
@@ -4463,14 +4463,14 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
                 existingSensor;
 
 
-            qDebug()
-                << "[REPLAY SENSOR UPDATE]"
-                << "Frame =" << payload->frameIndex
-                << "Sensor ="
-                << QString::fromStdString(
-                       existingSensor->Name)
-                << "Recorded ID ="
-                << sdata.id;
+            // qDebug()
+            //     << "[REPLAY SENSOR UPDATE]"
+            //     << "Frame =" << payload->frameIndex
+            //     << "Sensor ="
+            //     << QString::fromStdString(
+            //            existingSensor->Name)
+            //     << "Recorded ID ="
+            //     << sdata.id;
 
             continue;
         }
@@ -4496,14 +4496,14 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
         }
 
 
-        qDebug()
-            << "[REPLAY SENSOR CREATE]"
-            << "Frame =" << payload->frameIndex
-            << "Index =" << sdata.index
-            << "ID =" << sdata.id
-            << "Name =" << sensorName
-            << "Type =" << sdata.type
-            << "Parent =" << parentEntityId;
+        // qDebug()
+        //     << "[REPLAY SENSOR CREATE]"
+        //     << "Frame =" << payload->frameIndex
+        //     << "Index =" << sdata.index
+        //     << "ID =" << sdata.id
+        //     << "Name =" << sensorName
+        //     << "Type =" << sdata.type
+        //     << "Parent =" << parentEntityId;
 
 
         m_hierarchy->addSubComponent(
@@ -4534,17 +4534,17 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
             sensorsIndexMap[sdata.index] =
                 addedSensor;
 
-            qDebug()
-                << "[REPLAY SENSOR CREATE]"
-                << "SUCCESS:"
-                << sdata.id;
+            // qDebug()
+            //     << "[REPLAY SENSOR CREATE]"
+            //     << "SUCCESS:"
+            //     << sdata.id;
         }
         else
         {
-            qDebug()
-            << "[REPLAY SENSOR CREATE]"
-            << "FAILED:"
-            << sdata.id;
+            // qDebug()
+            // << "[REPLAY SENSOR CREATE]"
+            // << "FAILED:"
+            // << sdata.id;
         }
     }
 
@@ -4553,19 +4553,23 @@ void Replay::restoreSensorsFromPayload(QSharedPointer<PayLoad> payload)
     // 5. FINAL DEBUG
     // ============================================================
 
-    qDebug()
-        << "========== RESTORE SENSORS DONE =========="
-        << "Frame =" << payload->frameIndex
-        << "Global sensors ="
-        << static_cast<int>(
-               m_hierarchy->Sensors.size())
-        << "Replay map ="
-        << static_cast<int>(
-               sensorsIndexMap.size());
+    // qDebug()
+    //     << "========== RESTORE SENSORS DONE =========="
+    //     << "Frame =" << payload->frameIndex
+    //     << "Global sensors ="
+    //     << static_cast<int>(
+    //            m_hierarchy->Sensors.size())
+    //     << "Replay map ="
+    //     << static_cast<int>(
+    //            sensorsIndexMap.size());
 
 
     emit render(0.01f);
 }
+
+
+
+
 template<typename T, typename DataT, typename CRUDT, typename ListT, typename CRUDListT>
 static void genericAdded(
     QSharedPointer<PayLoad> payload,
@@ -4819,111 +4823,388 @@ void Recording::weaponRemoved(QSharedPointer<PayLoad> payload,
 
 void Replay::restoreIffsFromPayload(QSharedPointer<PayLoad> payload)
 {
-    if (!payload) return;
-    if (m_hierarchy->Platforms.empty()) return;
-    if (iffsRestored) return;
-    // DELETE
-    for (auto &crud : *payload->iffCRUDList) {
-        if (crud.operation == DELETE) {
-            auto it = iffsIndexMap_replay.find(crud.index);
-            if (it != iffsIndexMap_replay.end()) {
-                m_hierarchy->Iffs.erase(it->second.id.toStdString());
-                iffsIndexMap_replay.erase(it);
-            }
+    if (!payload || !m_hierarchy || !payload->iffList)
+        return;
+
+    // 1. Target set for this frame (lifetime list from SQLite)
+    QSet<QString> targetIffIDs;
+    for (const auto &idata : *payload->iffList) {
+        if (!idata.id.isEmpty())
+            targetIffIDs.insert(idata.id);
+    }
+
+    // qDebug() << "\n========== RESTORE IFFS =========="
+    //          << "\nFrame =" << payload->frameIndex
+    //          << "\nTarget iffs =" << targetIffIDs.size()
+    //          << "\nGlobal iffs ="
+    //          << static_cast<int>(m_hierarchy->Iffs.size());
+
+    // 2. Collect IFFs not in target
+    std::vector<std::pair<Platform*, std::string>> iffsToRemove;
+
+    for (auto &[platformID, platform] : m_hierarchy->Platforms) {
+        if (!platform) continue;
+
+        for (const auto &[iffID, iff] : platform->iffs.iffs) {
+            if (!iff) continue;
+            QString id = QString::fromStdString(iffID);
+            if (!targetIffIDs.contains(id))
+                iffsToRemove.push_back({platform, iffID});
         }
     }
-    bool anyCreated = false;
-    for (auto &idata : *payload->iffList) {
-        if (iffsIndexMap_replay.count(idata.index)) {
-            // UPDATE
-            auto iffIt = m_hierarchy->Iffs.find(idata.id.toStdString());
-            if (iffIt != m_hierarchy->Iffs.end())
-                iffIt->second->fromJson(idata.state);
+
+    // 3. Remove stale IFFs
+    for (const auto &[platform, iffID] : iffsToRemove) {
+        if (!platform) continue;
+
+        // qDebug() << "[REPLAY IFF DELETE]"
+        //          << "Frame =" << payload->frameIndex
+        //          << "Platform =" << QString::fromStdString(platform->ID)
+        //          << "IFF =" << QString::fromStdString(iffID);
+
+        for (auto it = iffsIndexMap_replay.begin();
+             it != iffsIndexMap_replay.end(); ) {
+            if (it->second.id.toStdString() == iffID)
+                it = iffsIndexMap_replay.erase(it);
+            else
+                ++it;
+        }
+
+        auto localIt = platform->iffs.iffs.find(iffID);
+        if (localIt != platform->iffs.iffs.end())
+            platform->iffs.removeSubComponent(iffID);
+    }
+
+    // 4. Create / update from target list
+    for (const auto &idata : *payload->iffList) {
+        if (idata.id.isEmpty())
+            continue;
+
+        // 4A. Already tracked by index → update
+        auto indexIt = iffsIndexMap_replay.find(idata.index);
+        if (indexIt != iffsIndexMap_replay.end()) {
+            auto globalIt = m_hierarchy->Iffs.find(indexIt->second.id.toStdString());
+            if (globalIt != m_hierarchy->Iffs.end() && globalIt->second) {
+                IFF* obj = globalIt->second;
+                std::string actualID       = obj->ID;
+                std::string actualParentID = obj->parentID;
+                Entity*     actualParent   = obj->parentEntity;
+
+                obj->fromJson(idata.state);
+                obj->ID           = actualID;
+                obj->parentID     = actualParentID;
+                obj->parentEntity = actualParent;
+                continue;
+            }
+            iffsIndexMap_replay.erase(indexIt); // stale
+        }
+
+        // 4B. Parent platform
+        QString parentEntityId = idata.state["_parentEntityId"].toString();
+        if (parentEntityId.isEmpty())
+            parentEntityId = idata.state["parentEntityId"].toString();
+        if (parentEntityId.isEmpty()) {
+            qDebug() << "[REPLAY IFF] Missing parent:" << idata.id;
             continue;
         }
-        iffsIndexMap_replay[idata.index] = idata;
-        QString iffName        = idata.state["_name"].toString();
-        if (iffName.isEmpty()) iffName = "IFF";
-        QString parentEntityId = idata.state["_parentEntityId"].toString();
-        if (parentEntityId.isEmpty()) continue;
 
-        auto platIt = m_hierarchy->Platforms.find(parentEntityId.toStdString());
-        if (platIt == m_hierarchy->Platforms.end()) continue;
+        auto platformIt = m_hierarchy->Platforms.find(parentEntityId.toStdString());
+        if (platformIt == m_hierarchy->Platforms.end() || !platformIt->second) {
+            qDebug() << "[REPLAY IFF] Parent not found:" << parentEntityId
+                     << "IFF:" << idata.id;
+            continue;
+        }
 
-        Platform* platform = platIt->second;
-        QString compId;
-        // if (platform->iffs)
-            compId = QString::fromStdString(platform->iffs.ID);
-        // else {
-        //     platform->addComponent("iffs");
-        //     if (platform->iffs)
-        //         compId = QString::fromStdString(platform->iffs->ID);
-        //     else continue;
-        // }
+        Platform* platform = platformIt->second;
 
-        m_hierarchy->addSubComponent(compId, iffName, "IFF", idata.id, idata.state);
+        // 4C. Ensure IFF component
+        if (platform->iffs.parentEntity != platform)
+            platform->iffs.init(platform);
+        platform->iffs.parentID = platform->ID;
+
+        QString componentID = QString::fromStdString(platform->iffs.ID);
+        if (m_hierarchy->Components.find(platform->iffs.ID)
+            == m_hierarchy->Components.end()) {
+            platform->addComponent("iffs");
+        }
+
+        // 4D. Exact ID only
+        IFF* existingIff = nullptr;
+
+        auto exactLocalIt = platform->iffs.iffs.find(idata.id.toStdString());
+        if (exactLocalIt != platform->iffs.iffs.end() && exactLocalIt->second)
+            existingIff = exactLocalIt->second;
+
+        if (!existingIff) {
+            auto globalIt = m_hierarchy->Iffs.find(idata.id.toStdString());
+            if (globalIt != m_hierarchy->Iffs.end() && globalIt->second
+                && globalIt->second->parentEntity == platform) {
+                existingIff = globalIt->second;
+            }
+        }
+
+        // 4E. Update existing
+        if (existingIff) {
+            std::string actualID       = existingIff->ID;
+            std::string actualParentID = existingIff->parentID;
+
+            existingIff->fromJson(idata.state);
+            existingIff->ID           = actualID;
+            existingIff->parentID     = actualParentID;
+            existingIff->parentEntity = platform;
+
+            m_hierarchy->Iffs[actualID]   = existingIff;
+            platform->iffs.iffs[actualID] = existingIff;
+            iffsIndexMap_replay[idata.index] = idata;
+            continue;
+        }
+
+        // 4F. Create with recorded ID
+        QString iffName = idata.state["_name"].toString();
+        if (iffName.isEmpty())
+            iffName = idata.state["name"].toString();
+        if (iffName.isEmpty())
+            iffName = idata.type.isEmpty() ? QString("IFF") : idata.type;
+
+        // qDebug() << "[REPLAY IFF CREATE]"
+        //          << "Frame =" << payload->frameIndex
+        //          << "ID =" << idata.id
+        //          << "Name =" << iffName
+        //          << "Parent =" << parentEntityId;
+
+        m_hierarchy->addSubComponent(
+            componentID,
+            iffName,
+            "IFF",
+            idata.id,
+            idata.state
+            );
+
+        auto addedIt = m_hierarchy->Iffs.find(idata.id.toStdString());
+        if (addedIt != m_hierarchy->Iffs.end() && addedIt->second) {
+            iffsIndexMap_replay[idata.index] = idata;
+            //qDebug() << "[REPLAY IFF CREATE] SUCCESS:" << idata.id;
+        } else {
+            //qDebug() << "[REPLAY IFF CREATE] FAILED:" << idata.id;
+        }
     }
-    iffsRestored = true;
+
+
     emit render(0.01f);
 }
-
 // =========================================================================
 // Replay::restoreRadiosFromPayload
 // =========================================================================
 
 void Replay::restoreRadiosFromPayload(QSharedPointer<PayLoad> payload)
 {
-    if (!payload) return;
-    if (m_hierarchy->Platforms.empty()) return;
-    if (radiosRestored) return;
+    if (!payload)
+        return;
+    if (!m_hierarchy)
+        return;
+    if (!payload->radioList)
+        return;
 
-    for (auto &crud : *payload->radioCRUDList) {
-        if (crud.operation == DELETE) {
-            auto it = radiosIndexMap_replay.find(crud.index);
-            if (it != radiosIndexMap_replay.end()) {
-                m_hierarchy->Radios.erase(it->second.id.toStdString());
-                radiosIndexMap_replay.erase(it);
+    // ============================================================
+    // 1. TARGET SET FOR THIS FRAME
+    // ============================================================
+    QSet<QString> targetRadioIDs;
+    for (const auto &rdata : *payload->radioList)
+    {
+        if (!rdata.id.isEmpty())
+            targetRadioIDs.insert(rdata.id);
+    }
+
+    // qDebug()
+    //     << "\n========== RESTORE RADIOS =========="
+    //     << "\nFrame =" << payload->frameIndex
+    //     << "\nTarget radios =" << targetRadioIDs.size()
+    //     << "\nGlobal radios ="
+    //     << static_cast<int>(m_hierarchy->Radios.size());
+
+    // ============================================================
+    // 2. COLLECT RADIOS NOT PRESENT IN TARGET FRAME
+    // ============================================================
+    std::vector<std::pair<Platform*, std::string>> radiosToRemove;
+
+    for (auto &[platformID, platform] : m_hierarchy->Platforms)
+    {
+        if (!platform)
+            continue;
+
+        auto &profileRadios = platform->radios.radios;
+
+        for (const auto &[radioID, radio] : profileRadios)
+        {
+            if (!radio)
+                continue;
+
+            QString id = QString::fromStdString(radioID);
+
+            if (!targetRadioIDs.contains(id))
+            {
+                radiosToRemove.push_back({
+                    platform,
+                    radioID
+                });
             }
         }
     }
-    bool hasRadioProfile = false;
-    for (const auto& [key, profilePtr] : m_hierarchy->ProfileCategories) {
-        if (profilePtr && profilePtr->type == Constants::EntityType::Radio) {
-            hasRadioProfile = true;
-            break;
+
+    // ============================================================
+    // 3. REMOVE STALE RADIOS
+    // ============================================================
+    for (const auto &[platform, radioID] : radiosToRemove)
+    {
+        if (!platform)
+            continue;
+
+        // qDebug()
+        //     << "[REPLAY RADIO DELETE]"
+        //     << "Frame =" << payload->frameIndex
+        //     << "Platform ="
+        //     << QString::fromStdString(platform->ID)
+        //     << "Radio ="
+        //     << QString::fromStdString(radioID);
+
+        // --------------------------------------------------------
+        // Remove replay index mappings pointing to this radio
+        // --------------------------------------------------------
+        for (auto it = radiosIndexMap_replay.begin();
+             it != radiosIndexMap_replay.end();)
+        {
+            if (it->second.id.toStdString() == radioID)
+            {
+                it = radiosIndexMap_replay.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        // --------------------------------------------------------
+        // Remove through RadioProfile.
+        //
+        // IMPORTANT:
+        // Do NOT directly delete Radio*.
+        // removeSubComponent already erases maps + deletes object.
+        // --------------------------------------------------------
+        auto radioIt =
+            platform->radios.radios.find(radioID);
+
+        if (radioIt !=
+            platform->radios.radios.end())
+        {
+            platform->radios.removeSubComponent(radioID);
         }
     }
-    if (!hasRadioProfile) {
-        ProfileCategaory* radioProfile = m_hierarchy->addProfileCategaory("Radios");
-        if (radioProfile)
-            radioProfile->setProfileType(Constants::EntityType::Radio);
-    }
 
-    bool anyCreated = false;
-    for (auto &rdata : *payload->radioList) {
-        if (radiosIndexMap_replay.count(rdata.index)) {
-            auto radioIt = m_hierarchy->Radios.find(rdata.id.toStdString());
-            if (radioIt != m_hierarchy->Radios.end())
-                radioIt->second->fromJson(rdata.state);
+    // ============================================================
+    // 4. CREATE / UPDATE FROM TARGET LIST
+    // ============================================================
+    for (const auto &rdata : *payload->radioList)
+    {
+        if (rdata.id.isEmpty())
+            continue;
+
+        // 4A. Already tracked by replay index → update
+        auto indexIt = radiosIndexMap_replay.find(rdata.index);
+        if (indexIt != radiosIndexMap_replay.end()) {
+            auto globalIt = m_hierarchy->Radios.find(indexIt->second.id.toStdString());
+            if (globalIt != m_hierarchy->Radios.end() && globalIt->second) {
+                // Preserve identity around fromJson
+                Radio* r = globalIt->second;
+                std::string actualID       = r->ID;
+                std::string actualParentID = r->parentID;
+                Entity*     actualParent   = r->parentEntity;
+
+                r->fromJson(rdata.state);
+                r->ID           = actualID;
+                r->parentID     = actualParentID;
+                r->parentEntity = actualParent;
+
+                continue;
+            }
+            radiosIndexMap_replay.erase(indexIt); // stale
+        }
+
+        // 4B. Parent platform
+        QString parentEntityId = rdata.state["_parentEntityId"].toString();
+        if (parentEntityId.isEmpty())
+            parentEntityId = rdata.state["parentEntityId"].toString();
+        if (parentEntityId.isEmpty())
+            continue;
+
+        auto platformIt = m_hierarchy->Platforms.find(parentEntityId.toStdString());
+        if (platformIt == m_hierarchy->Platforms.end() || !platformIt->second)
+            continue;
+
+        Platform* platform = platformIt->second;
+
+        // 4C. Ensure radios component
+        if (platform->radios.parentEntity != platform)
+            platform->radios.init(platform);
+        platform->radios.parentID = platform->ID;
+
+        QString componentID = QString::fromStdString(platform->radios.ID);
+        if (m_hierarchy->Components.find(platform->radios.ID) == m_hierarchy->Components.end())
+            platform->addComponent("radios");
+
+        // 4D. Exact ID only (NO name fallback for multi-radio correctness)
+        Radio* existingRadio = nullptr;
+
+        auto exactLocalIt = platform->radios.radios.find(rdata.id.toStdString());
+        if (exactLocalIt != platform->radios.radios.end() && exactLocalIt->second)
+            existingRadio = exactLocalIt->second;
+
+        if (!existingRadio) {
+            auto globalIt = m_hierarchy->Radios.find(rdata.id.toStdString());
+            if (globalIt != m_hierarchy->Radios.end() && globalIt->second &&
+                globalIt->second->parentEntity == platform) {
+                existingRadio = globalIt->second;
+            }
+        }
+
+        // 4E. Update existing
+        if (existingRadio) {
+            std::string actualID       = existingRadio->ID;
+            std::string actualParentID = existingRadio->parentID;
+
+            existingRadio->fromJson(rdata.state);
+            existingRadio->ID           = actualID;
+            existingRadio->parentID     = actualParentID;
+            existingRadio->parentEntity = platform;
+
+            m_hierarchy->Radios[actualID]     = existingRadio;
+            platform->radios.radios[actualID] = existingRadio;
+            radiosIndexMap_replay[rdata.index] = rdata;
             continue;
         }
-        radiosIndexMap_replay[rdata.index] = rdata;
-        QString radioName = rdata.state["_name"].toString();
-        if (radioName.isEmpty()) radioName = "Radio";
-        QString parentEntityId = rdata.state["_parentEntityId"].toString();
-        if (parentEntityId.isEmpty()) continue;
-        auto platIt = m_hierarchy->Platforms.find(parentEntityId.toStdString());
-        if (platIt == m_hierarchy->Platforms.end()) continue;
-        Platform* platform = platIt->second;
-        // if (!platform->radios)
-            platform->addComponent("radios");
-        // if (!platform->radios) continue;
 
-        QString compId = QString::fromStdString(platform->radios.ID);
-        m_hierarchy->addSubComponent(compId, radioName, "Radio", rdata.id, rdata.state);
-        anyCreated = true;
+        // 4F. Create with recorded ID (RadioProfile must honor data2 — Fix A)
+        QString radioName = rdata.state["_name"].toString();
+        if (radioName.isEmpty())
+            radioName = rdata.state["name"].toString();
+        if (radioName.isEmpty())
+            radioName = rdata.type.isEmpty() ? QString("Radio") : rdata.type;
+
+        m_hierarchy->addSubComponent(
+            componentID,
+            radioName,
+            "Radio",
+            rdata.id,      // recorded ID → data2
+            rdata.state
+            );
+
+        auto addedIt = m_hierarchy->Radios.find(rdata.id.toStdString());
+        if (addedIt != m_hierarchy->Radios.end() && addedIt->second) {
+            radiosIndexMap_replay[rdata.index] = rdata;
+    // qDebug() << "[REPLAY RADIO CREATE] SUCCESS:" << rdata.id;
+        } else {
+           // qDebug() << "[REPLAY RADIO CREATE] FAILED (ID not registered):" << rdata.id;
+        }
     }
-    radiosRestored = true;
     emit render(0.01f);
 }
 // =========================================================================

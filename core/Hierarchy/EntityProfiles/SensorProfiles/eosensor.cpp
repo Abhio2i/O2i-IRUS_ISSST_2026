@@ -18,7 +18,6 @@ constexpr float FEET_TO_METERS = 0.3048f;
 constexpr float PI_F           = 3.141592653589793f;
 
 
-
 EOSensor::EOSensor(Hierarchy* h) : Sensor(h) {
     subType = SubType::EO;
     frequency = 10.0f;
@@ -215,6 +214,7 @@ void EOSensor::scan()
         const float quickDist =
             eo_ir->getHorizontalDistance(sensor_cood, obj_cood);
         if (quickDist > range * 1000.0f * 1.1f) {
+            EODetectionCategory[ID] = platform->category;
             EODetectionCoord[ID] = {false, CartesianCoord{}};
             continue;
         }
@@ -232,6 +232,7 @@ void EOSensor::scan()
         const float targetHorizontalTargetAngle =
             eo_ir->getHorizontalTargetAngle(
                 sensor_cood, target_cood, sensorHeading);
+
         const float targetVerticalTargetAngle =
             eo_ir->getVerticalTargetAngle(
                 sensorAltitude, targetAltitude,
@@ -246,6 +247,21 @@ void EOSensor::scan()
             targetHorizontalDistance, vForFov, hForFov);
 
         // OpenGL local coords (nose-relative HTA)
+        // CartesianCoord targetCoord;
+        // {
+        //     const float horizontalAngleRad =
+        //         qDegreesToRadians(targetHorizontalTargetAngle);
+        //     targetCoord.x =
+        //         targetHorizontalDistance * std::sin(horizontalAngleRad);
+        //     targetCoord.z =
+        //         -targetHorizontalDistance * std::cos(horizontalAngleRad);
+        //     targetCoord.y  = targetAltitude;
+        //     targetCoord.rx = 0.0f;
+        //     targetCoord.ry = -(targetHeading - sensorHeading);
+        //     targetCoord.rz = 0.0f;
+        // }
+
+        // OpenGL local coords (nose-relative HTA) + target attitude
         CartesianCoord targetCoord;
         {
             const float horizontalAngleRad =
@@ -255,12 +271,17 @@ void EOSensor::scan()
             targetCoord.z =
                 -targetHorizontalDistance * std::cos(horizontalAngleRad);
             targetCoord.y  = targetAltitude;
-            targetCoord.rx = 0.0f;
-            targetCoord.ry = -(targetHeading - sensorHeading);
-            targetCoord.rz = 0.0f;
+
+            // Platform attitude → EO model orientation
+            // Qt euler: x = pitch, y = yaw, z = roll
+            const QVector3D targetEuler = tf.rotation().toEulerAngles();
+            targetCoord.rx = -targetEuler.x();                         // pitch (samne tilt)
+            targetCoord.ry = -(targetHeading - sensorHeading);        // relative yaw (pehle jaisa)
+            targetCoord.rz = targetEuler.z();                         // roll
         }
 
         if (!inFov) {
+            EODetectionCategory[ID] = platform->category;
             EODetectionCoord[ID] = {false, targetCoord};
             continue;
         }
@@ -268,6 +289,7 @@ void EOSensor::scan()
         // --- 3) Slant range gate ---
         const float dist3d = eo_ir->distanceBtw(sensor_cood, obj_cood);
         if (dist3d > range * 1000.0f) {
+            EODetectionCategory[ID] = platform->category;
             EODetectionCoord[ID] = {false, targetCoord};
             continue;
         }
@@ -294,10 +316,13 @@ void EOSensor::scan()
         else
             detectThresh = 0.40f;
 
+        EODetectionCategory[ID] = platform->category;
         EODetectionCoord[ID] = {
             (result >= detectThresh),
             targetCoord
         };
+
+
     }
 }
 
@@ -486,7 +511,6 @@ QJsonObject EOSensor::toJson() const {
     defaultObj["sensor waveband end"] =   toParm(sensor_waveband.second,"L",0,1000000);
     defaultObj["visibility"]    = toParm(visibility_m         ,"m",0,std::numeric_limits<float>::max());
     defaultObj["mass density"]  = toParm(mass_density_g_m3    ,"g/m3",0,100);
-    defaultObj["range km"]      = toParm(range_km             ,"km"  ,0,100);
     defaultObj["particle diameter m"]   = toParm(particle_diameter_m  ,"m",0,100);
     defaultObj["material density g m3"] = toParm(material_density_g_m3,"g/m3",0,100);
     defaultObj["q ext"] = toParm(q_ext, "Q_exe",1,100);
@@ -623,9 +647,6 @@ void EOSensor::fromJson(const QJsonObject& obj) {
         }
         if(defaultObj.contains("mass density")){
             mass_density_g_m3   = valueFromParm(defaultObj["mass density"].toObject());
-        }
-        if(defaultObj.contains("range km")){
-            range_km   = valueFromParm(defaultObj["range km"].toObject());
         }
         if(defaultObj.contains("particle diameter m")){
             particle_diameter_m   = valueFromParm(defaultObj["particle diameter m"].toObject());

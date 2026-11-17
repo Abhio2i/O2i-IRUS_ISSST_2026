@@ -17,6 +17,14 @@
 #include "core/Hierarchy/EntityProfiles/radio.h"
 #include "core/Hierarchy/EntityProfiles/sensor.h"
 #include "core/Hierarchy/EntityProfiles/specialzone.h"
+#include "core/Hierarchy/EntityProfiles/weapons/artillery.h"
+#include "core/Hierarchy/EntityProfiles/weapons/bomb.h"
+#include "core/Hierarchy/EntityProfiles/weapons/chaff.h"
+#include "core/Hierarchy/EntityProfiles/weapons/flare.h"
+#include "core/Hierarchy/EntityProfiles/weapons/missile.h"
+#include "core/Hierarchy/EntityProfiles/weapons/rocket.h"
+#include "core/Hierarchy/EntityProfiles/weapons/sonobuoy.h"
+#include "core/Hierarchy/EntityProfiles/weapons/torpedo.h"
 #include "core/Hierarchy/Utils/entityutils.h"
 #include "qapplication.h"
 #include "qjsonarray.h"
@@ -212,6 +220,34 @@ Entity* Folder::addEntity(std::string entityName, std::string iD,QString data1){
                     }else
                         if(type == Constants::EntityType::IFF){
                             entity = new IFF(parent);
+                        }else
+                        if(type == Constants::EntityType::Weapon){
+                            if(data1 == "Missile"){
+                                entity = new Missile(parent);
+                            }else
+                                if(data1 == "Sonobuoy"){
+                                    entity = new Sonobuoy(parent);
+                                }else
+                                    if(data1 == "Bomb"){
+                                        entity = new Bomb(parent);
+                                    }else
+                                        if(data1 == "Torpedo"){
+                                            entity = new Torpedo(parent);
+                                        }else
+                                            if(data1 == "Artillery"){
+                                                entity = new Artillery(parent);
+                                            }else
+                                                if(data1 == "Rocket"){
+                                                    entity = new Rocket(parent);
+                                                }else
+                                                    if(data1 == "Flare"){
+                                                        entity = new Flare(parent);
+                                                    }else
+                                                        if(data1 == "Chaff"){
+                                                            entity = new Chaff(parent);
+                                                        }else{
+                                                            entity = new Sonobuoy(parent);
+                                                        }
                         }else{
                             entity = new Platform(parent);
                         }
@@ -429,11 +465,12 @@ void Folder::fromJson(const QJsonObject& obj)
             QJsonObject entityObj = entitiesObj[key].toObject();
             Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
             Entity *entity;
+            QString data1 = entityObj["SensorType"].toString();
             if(type == Constants::EntityType::Radio){
                 entity = new Radio(parent);
             }else
                 if(type == Constants::EntityType::Sensor){
-                    QString data1 = entityObj["SensorType"].toString();
+
                     if(data1 == "Generic"){
                         entity = new Radar(parent);
                     }else
@@ -464,24 +501,62 @@ void Folder::fromJson(const QJsonObject& obj)
                                                         entity = new Sensor(parent);
                                                     }
                 }else
-                    if(type == Constants::EntityType::FixedPoint){
-                        entity = new FixedPoints(parent);
-                    }else
-                        if(type == Constants::EntityType::Formation){
-                            entity = new Formation(parent);
-                        }else
-                            if(type == Constants::EntityType::SpecialZone){
-                                entity = new Specialzone(parent);
-                            }else
-                                if(type == Constants::EntityType::IFF){
-                                    entity = new IFF(parent);
-                                }else{
+                if(type == Constants::EntityType::FixedPoint){
+                    entity = new FixedPoints(parent);
+                }else
+                if(type == Constants::EntityType::Formation){
+                    entity = new Formation(parent);
+                }else
+                if(type == Constants::EntityType::SpecialZone){
+                    entity = new Specialzone(parent);
+                }else
+                if(type == Constants::EntityType::IFF){
+                    entity = new IFF(parent);
+                }else
+                if(type == Constants::EntityType::Weapon){
+                                if(data1 == "Missile"){
+                                    entity = new Missile(parent);
+                                }else
+                                    if(data1 == "Sonobuoy"){
+                                        entity = new Sonobuoy(parent);
+                                    }else
+                                        if(data1 == "Bomb"){
+                                            entity = new Bomb(parent);
+                                        }else
+                                            if(data1 == "Torpedo"){
+                                                entity = new Torpedo(parent);
+                                            }else
+                                                if(data1 == "Artillery"){
+                                                    entity = new Artillery(parent);
+                                                }else
+                                                    if(data1 == "Rocket"){
+                                                        entity = new Rocket(parent);
+                                                    }else
+                                                        if(data1 == "Flare"){
+                                                            entity = new Flare(parent);
+                                                        }else
+                                                            if(data1 == "Chaff"){
+                                                                entity = new Chaff(parent);
+                                                            }else{
+                                                                entity = new Sonobuoy(parent);
+                                                            }
+                            }else{
                                     entity = new Platform(parent);
                                 }
             entity->type = type;
             entity->Name = entityObj["name"].toString().toStdString();
             entity->ID = entityObj["id"].toString().toStdString();
             if (entity) {
+                if (entityObj.contains("Category") && entityObj["Category"].isObject()) {
+                    QJsonObject CategoryObj = entityObj["Category"].toObject();
+                    if (CategoryObj.contains("value")){
+                        for (int i = 0; i < 3 ; i++) {
+                            if (entity->CategoryNames[i] == CategoryObj["value"].toString().toStdString()) {
+                                entity->category = (Entity::Category)i;
+                            }
+                        }
+                    }
+                }
                 addEntityWithObject(entity);
                 entity->addSupportedcomponent();
                 entity->fromJson(entityObj);

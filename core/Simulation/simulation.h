@@ -22,7 +22,6 @@
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
-#include <btBulletDynamicsCommon.h>
 #include <QObject>
 #include <QTimer>
 #include <QElapsedTimer>
@@ -179,14 +178,6 @@ signals:
 private:
     NetworkManager *networkManager = nullptr;   //!< Network manager for sync
     CanvasWidget   *m_canvas       = nullptr;   //!< Canvas for weapon blast effects
-
-    // Bullet Physics world components
-    btBroadphaseInterface* broadphase;                      //!< Broadphase collision detection
-    btDefaultCollisionConfiguration* collisionConfiguration; //!< Collision configuration
-    btCollisionDispatcher* dispatcher;                      //!< Collision dispatcher
-    btSequentialImpulseConstraintSolver* solver;            //!< Constraint solver
-    btDiscreteDynamicsWorld* dynamicsWorld;                 //!< Bullet dynamics world
-    std::unordered_map<std::string, btRigidBody*> bulletBodies; //!< Map of Bullet rigid bodies
 
     QTimer *updateTimer;        //!< Timer for frame updates
     float deltaTime;            //!< Time since last frame

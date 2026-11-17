@@ -169,6 +169,7 @@ public:
     std::unordered_map<std::string, std::function<void()>> componentMap;
     std::unordered_map<std::string, Component> *components = nullptr;
 
+    void setActive(bool value);
     // =========================================================================
     // SECTION: Parameter Management
     // DESCRIPTION: CRUD operations for platform-specific dynamic variables.
@@ -177,7 +178,7 @@ public:
     void editParam(std::string key,std::string value);
     std::string getParam(std::string key);
     void removeParam(std::string key);
-    QJsonObject customParameters;
+    QJsonObject AdditionalParameters;
 
     // =========================================================================
     // SECTION: Core Simulation Logic
@@ -220,6 +221,7 @@ public:
     float dropTime =0;
     void SaveState();
     void RestoreState();
+
 public slots:
     void start();
     void reset();

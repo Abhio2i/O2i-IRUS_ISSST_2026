@@ -3,49 +3,45 @@
 
 #include "core/Hierarchy/EntityProfiles/weapon.h"
 
-class Artillery : public Weapon
+class Artillery: public Weapon
 {
     Q_OBJECT
 public:
     explicit Artillery(Hierarchy* h);
+    ~Artillery();
 
-    WeaponType weaponType = WeaponType::Artillery;
-    QString weaponTypeName() const override { return "Artillery"; }
+    float MuzzleVelocity = 300.0f;       // m/s
+    float ProjectileMass = 5.0f;         // kg
+    float Caliber = 5.0f;                // mm
+    float ElevationAngle = 45.0f;        // degrees
+    float AzimuthAngle = 0.0f;           // degrees
+    float DragCoefficient = 0.01f;       // dimensionless
+    float MaxFlightTime = 120.0f;        // seconds
+    bool GravityEnabled = true;
 
-    float muzzleVelocity   = 827.0f;
-    float calibre          = 155.0f;
-    float barrelLength     = 6.0f;
-    int   propellantCharge = 8;
-    float launchAngle      = 45.0f;
-    float dragCoefficient  = 0.295f;
-    bool  spinStabilised   = true;
-    void Update() override;
-    enum class ShellType { HE, HEAT, HESH, Illumination, Smoke, Cluster, Excalibur, DPICM };
-    ShellType shellType = ShellType::HE;
+    void Update()override{};
+    void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
+    std::vector<std::string> getSupportedComponents() override;
 
-    GuidanceType guidanceType   = GuidanceType::Unguided;
-    bool         hasGpsGuidance = false;
-    float        cep            = 50.0f;
+    void addSupportedcomponent() override;
 
-    bool  mrsiEnabled        = false;
-    int   mrsiRounds         = 5;
-    float mrsiFiringInterval = 2.5f;
+    void addComponent(std::string name) override;
 
-    enum class FuzeType { PointDetonating, Delay, ProximityAirburst, TimedAirburst };
-    FuzeType fuzeType       = FuzeType::PointDetonating;
-    float    airburstHeight = 10.0f;
+    void removeComponent(std::string name) override;
 
-    void        launch()                              override;
-    void        flyToTarget()                         override;
-    void        checkDetonation()                     override;
-    float       calculateImpactTime(Platform *target) override;
+    QJsonObject getComponent(std::string name) override;
+
+    void updateComponent(QString name, const QJsonObject& obj) override;
+
     QJsonObject toJson()                        const override;
     void        fromJson(const QJsonObject&)          override;
-
-    QString shellTypeToString()             const;
-    QString fuzeTypeToString()              const;
-    void    setShellTypeFromString  (const QString&);
-    void    setFuzeTypeFromString   (const QString&);
+    QJsonObject AdditionalParameters;   //!< User-defined extension parameters
+    void SaveState();
+    void RestoreState();
+private:
+    bool statesaved = false;
+    QJsonObject InitalState;
 };
 
 #endif // ARTILLERY_H

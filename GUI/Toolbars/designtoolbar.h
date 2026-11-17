@@ -142,6 +142,7 @@ private:
     QAction* importLayerAction      = nullptr;
     QAction* loadJsonAction         = nullptr;
     QAction* saveJsonAction         = nullptr;
+    QAction* scaleAction = nullptr;
 
     // %%% Maps & Lists %%%
     QMap<QString, QAction*>  layerActions;

@@ -134,6 +134,7 @@ void MapWithCanvas::setTooltipOptions(const QSet<QString>& options)
     if (m_editorCanvas)
         m_editorCanvas->setTooltipOptions(options);
 }
+
 void MapWithCanvas::centerOnEntity(const QString& hierarchyId, bool adjustZoom)
 {
     Q_UNUSED(adjustZoom);
@@ -161,3 +162,5 @@ void MapWithCanvas::refreshAllLayers()
     if (m_dynamicCanvas) m_dynamicCanvas->update();
     if (m_editorCanvas)  m_editorCanvas->update();
 }
+
+

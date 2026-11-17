@@ -21,6 +21,7 @@
 #include "EODisplayLib/eotargets.h"
 #include "EODisplayLib/eovisionangle.h"
 #include "../core/Hierarchy/EntityProfiles/sensor.h"
+#include "core/Hierarchy/entity.h"
 
 // Forward declaration only — full definition is included in the .cpp.
 // A pointer is all this header needs; keeps the dependency light and
@@ -50,7 +51,11 @@ public:
         float _horizontalCameraAngle,
         std::unordered_map<std::string,
                            std::pair<bool, CartesianCoord>> _EODetectionCoord,
-        float _maxRangeMeters = 50000.0f);
+        float _maxRangeMeters = 50000.0f,
+        const std::unordered_map<std::string, Entity::Category>& _EODetectionCategory = {});
+
+
+    std::unordered_map<std::string, Entity::Category> EODetectionCategory;
 
     /* ===================  PHASE 1: GIMBAL / SLEW / ZOOM  =================== *
      * Public control surface for future Manual/Cue/Track modes. Nothing else
@@ -85,6 +90,9 @@ public:
     // while a fast-moving TRACK-mode target's true bearing kept changing,
     // causing the lock to silently drift out of the FOV cone over time.
     void setPairedSensor(EOSensor *sensor) { m_pairedSensor = sensor; }
+
+
+    void resetLandOrigin();
 
 private:
     PoseGeo sensorPoseGeo;
@@ -148,6 +156,10 @@ private:
     float currentElevation   = 0.0f;
     float commandedAzimuth   = 0.0f;
     float commandedElevation = 0.0f;
+
+    bool m_landOriginSet = false;
+    double m_landOriginLat = 0.0;
+    double m_landOriginLon = 0.0;
 
     float slewRateDegPerSec  = 60.0f; // realistic mid-range gimbal speed
     float zoomLevel          = 1.0f;  // 1x = base FOV, never <= 0
@@ -323,7 +335,7 @@ private:
             length(_length ),
             width (_width  ),
             height(_height )
-            {};
+        {};
     };
     EntityDimension Boeing_777_200ER{63.73, 60.93, 18.5};
 };

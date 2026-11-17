@@ -78,21 +78,8 @@ MainWindow::EditorKey MainWindow::editorKeyFromString(const QString& key)
 // ---------------------------------------------------------------------------
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
-    setStyleSheet(MainWindowStyles::MainWindow);
-    qApp->setStyle(QStyleFactory::create("Fusion"));
-    QPalette darkPalette;
-    darkPalette.setColor(QPalette::Window, QColor("#0F2636"));
-    darkPalette.setColor(QPalette::WindowText, Qt::white);
-    darkPalette.setColor(QPalette::ToolTipBase, Qt::white);
-    darkPalette.setColor(QPalette::ToolTipText, Qt::white);
-    darkPalette.setColor(QPalette::Text, Qt::white);
-    darkPalette.setColor(QPalette::ButtonText, Qt::white);
-    darkPalette.setColor(QPalette::BrightText, Qt::red);
-    darkPalette.setColor(QPalette::Link, QColor(42, 130, 218));
-    darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
-    qApp->setPalette(darkPalette);
-    qApp->setStyleSheet(qApp->styleSheet() + MainWindowStyles::ToolTip);
 
+    setStyleSheet(MainWindowStyles::MainWindow);
     MainWindow::s_instance = this;
     MainWindow::scenarioconfig = new ScenarioConfig();
     ApplicationDialog::setGlobalDatabaseEnabled(scenarioconfig->getSavedDatabaseEnabled());
@@ -291,7 +278,6 @@ void MainWindow::onHelpButtonClicked()
         return;
     }
 
-
     QString browserBinary = QFileInfo(browser).fileName();
     bool isChromeFamily = browserBinary.contains("chrome", Qt::CaseInsensitive) ||
                           browserBinary.contains("chromium", Qt::CaseInsensitive);
@@ -300,7 +286,6 @@ void MainWindow::onHelpButtonClicked()
         args << "--no-sandbox";
     }
     args << htmlFilePath;
-
     if (!QProcess::startDetached(browser, args)) {
         QMessageBox::warning(this, "Error", "Failed to launch browser for Help.");
     }
@@ -416,8 +401,6 @@ void MainWindow::connectFileMenuActions()
         if (!currentEditor) return;
         saveToSameFileWithTDFSupport(currentEditor);
     }, Qt::UniqueConnection);
-
-
     if (QAction* sameSave = mainMenuBar->getSameSaveAction()) {
         sameSave->setShortcut(QKeySequence::Save);
         sameSave->setShortcutContext(Qt::ApplicationShortcut);
@@ -569,19 +552,15 @@ void MainWindow::connectLoadActions()
     }, Qt::UniqueConnection);
 }
 
-
 void MainWindow::loadLibraryFileForEditor(const QString& filePath, QMainWindow* editor)
 {
     if (filePath.isEmpty()) return;
-
     RuntimeEditor* rtEditor = qobject_cast<RuntimeEditor*>(editor);
     ScenarioEditor* scEditor = qobject_cast<ScenarioEditor*>(editor);
     if (!rtEditor && !scEditor) return;
-
     if (rtEditor && rtEditor->tacticalDisplay && rtEditor->tacticalDisplay->canvas) {
         rtEditor->tacticalDisplay->canvas->fullCanvasReset();
     }
-
     showLoadingOverlay("Loading Database...");
     QCoreApplication::processEvents();
 
@@ -679,6 +658,12 @@ void MainWindow::connectSettingsAndInfoActions()
                     connect(&dialog, &ApplicationDialog::canvasIconState,
                             scEditor->m_apiMapWidget->dynamicCanvas(),
                             &DynamicCanvas::setImageScale);
+                    //  arti new added for entity zoom scale
+
+                    connect(&dialog, &ApplicationDialog::entityZoomScaleState,
+                            scEditor->m_apiMapWidget->dynamicCanvas(),
+                            &DynamicCanvas::setEntityZoomScaleEnabled);
+                    //   end
                 }
                 // ==============================
             } else if (RuntimeEditor* rtEditor = qobject_cast<RuntimeEditor*>(currentEditor)) {
@@ -691,6 +676,11 @@ void MainWindow::connectSettingsAndInfoActions()
                     connect(&dialog, &ApplicationDialog::canvasIconState,
                             rtEditor->m_apiMapWidget->dynamicCanvas(),
                             &DynamicCanvas::setImageScale);
+                    //  arti new added for entity zoom scale
+                    connect(&dialog, &ApplicationDialog::entityZoomScaleState,
+                            rtEditor->m_apiMapWidget->dynamicCanvas(),
+                            &DynamicCanvas::setEntityZoomScaleEnabled);
+                    // end
                 }
                 // ==============================
                 if (rtEditor->simulation) {
@@ -706,7 +696,9 @@ void MainWindow::connectSettingsAndInfoActions()
                     }
                 });
         dialog.exec();
-    }, Qt::UniqueConnection);
+        if (dialog.needsRestart())
+            QTimer::singleShot(0, this, [this]() { restartApplication(); });
+     }, Qt::UniqueConnection);
 }
 void MainWindow::connectPluginActions()
 {
@@ -2142,7 +2134,53 @@ void MainWindow::unloadScenarioAndRuntimeEditors()
     m_pendingEntitySyncToScenario.clear();
     m_pendingEntitySyncToRuntime.clear();
 }
+bool MainWindow::isDatabaseLoadedInEditor(const QString& dbPath) const
+{
+    if (!databaseEditor || dbPath.isEmpty() || databaseEditor->lastSavedFilePath.isEmpty())
+        return false;
+    return QFileInfo(databaseEditor->lastSavedFilePath).canonicalFilePath()
+           == QFileInfo(dbPath).canonicalFilePath();
+}
 
+bool MainWindow::loadDatabaseIntoEditor(const QString& dbPath)
+{
+    if (!databaseEditor || dbPath.isEmpty() || !QFileInfo::exists(dbPath))
+        return false;
+    if (isDatabaseLoadedInEditor(dbPath))
+        return true;
+
+    // DB editor ke unsaved changes silently overwrite nahi karne
+    if (databaseEditor->hasUnsavedChanges) {
+        QMessageBox box(this);
+        box.setStyleSheet(MainWindowStyles::MessageBox);
+        box.setWindowTitle("Unsaved Changes");
+        box.setIcon(QMessageBox::Warning);
+        box.setText("Database Editor has unsaved changes.\n"
+                    "Loading the associated database will discard them.");
+        box.setStandardButtons(QMessageBox::Discard | QMessageBox::Cancel);
+        if (box.exec() != QMessageBox::Discard)
+            return false;
+        databaseEditor->clearUnsavedChanges();
+    }
+
+    showLoadingOverlay("Loading Database...");
+    databaseEditor->loadFromJsonFile(dbPath);
+    if (!isDatabaseLoadedInEditor(dbPath)) {      // load fail hua
+        hideLoadingOverlay();
+        return false;
+    }
+    RecentProjectsManager::instance()->addToRecentProjects(
+        dbPath, RecentProjectsManager::DatabaseEditor);
+
+    // Library trees refresh (library = databaseEditor->hierarchy, shared hai)
+    if (scenarioEditor)
+        loadLibraryForEditor(getDatabaseHierarchy(), scenarioEditor->libTreeView, dbPath);
+    if (runtimeEditor)
+        loadLibraryForEditor(runtimeEditor->library, runtimeEditor->libTreeView, dbPath);
+
+    hideLoadingOverlay();
+    return true;
+}
 void MainWindow::onDatabaseFileChanged(const QString& newDbPath)
 {
     if (newDbPath.isEmpty() || !databaseEditor)
@@ -2242,4 +2280,33 @@ void MainWindow::restoreGisSnapshotFor(QWidget* editorWidget)
     } else if (runtimeEditor && editorWidget == runtimeEditor && m_hasRuntimeGisSnapshot) {
         ShapeApi::instance()->fromJson(m_runtimeGisSnapshot);
     }
+}
+void MainWindow::restartApplication()
+{
+    QMessageBox box(this);
+    box.setStyleSheet(MainWindowStyles::MessageBox);
+    box.setWindowTitle("Restart Required");
+    box.setIcon(QMessageBox::Question);
+    box.setText("Settings have been saved.\n\n"
+                "Restart the application to apply the new settings?");
+
+    // Only Restart Now button
+    QPushButton* restartBtn = box.addButton("Restart Now", QMessageBox::AcceptRole);
+    box.setDefaultButton(restartBtn);
+
+    // Completely remove close button (X)
+    box.setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
+
+    box.exec();
+
+    // Always restart
+    const QString exe = QCoreApplication::applicationFilePath();
+    const QStringList args = QCoreApplication::arguments().mid(1);
+
+    // closeEvent unsaved-changes prompt chalayega; Cancel par restart nahi hoga
+    if (!close())
+        return;
+
+    QProcess::startDetached(exe, args);
+    QCoreApplication::quit();
 }

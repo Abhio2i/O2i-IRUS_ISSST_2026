@@ -45,17 +45,25 @@ Platform::~Platform(){
 }
 
 void Platform::SaveState(){
-    /*if(transform)*/transform.SaveState();
-    /*if(trajectory)*/trajectory.SaveState();
-    /*if(dynamicModel)*/dynamicModel.SaveState();
-    /*if(weapons)*/weapons.SaveState();
+    transform.SaveState();
+    trajectory.SaveState();
+    dynamicModel.SaveState();
+    weapons.SaveState();
 }
 void Platform::RestoreState(){
-    /*if(transform)*/transform.RestoreState();
-    /*if(trajectory)*/trajectory.RestoreState();
-    /*if(dynamicModel)*/dynamicModel.RestoreState();
-    /*if(weapons)*/weapons.RestoreState();
+    transform.RestoreState();
+    trajectory.RestoreState();
+    dynamicModel.RestoreState();
+    weapons.RestoreState();
     dropcount = 0;
+}
+
+void Platform::setActive(bool value){
+    if(root){
+        Active = value;
+        auto& data = root->world.AddComponent<ECS::Entity_Data>(ecsID);
+        data.active = value;
+    }
 }
 
 void Platform::Start(){
@@ -203,21 +211,21 @@ void Platform::launchBombs()
     //     return;
     // }
 
-    int total = 0, launched = 0;
-    for (auto& [id, weapon] : *weapons.weapons) {
-        if (!weapon) continue;
-        Bomb* bomb = dynamic_cast<Bomb*>(weapon);
-        if (!bomb) continue;
-        total++;
-        if (bomb->isLaunched) continue;
-        bomb->parentEntity = this;
-        bomb->launch();
-        launched++;
-    }
+    // int total = 0, launched = 0;
+    // for (auto& [id, weapon] : *weapons.weapons) {
+    //     if (!weapon) continue;
+    //     Bomb* bomb = dynamic_cast<Bomb*>(weapon);
+    //     if (!bomb) continue;
+    //     total++;
+    //     if (bomb->isLaunched) continue;
+    //     bomb->parentEntity = this;
+    //     bomb->launch();
+    //     launched++;
+    // }
 
-    Console::log("Platform::launchBombs() — " + Name + " released " +
-                 std::to_string(launched) + "/" + std::to_string(total) + " bombs" +
-                 " at alt=" + std::to_string(static_cast<int>(transform.geocord.altitude)) + "m");
+    // Console::log("Platform::launchBombs() — " + Name + " released " +
+    //              std::to_string(launched) + "/" + std::to_string(total) + " bombs" +
+    //              " at alt=" + std::to_string(static_cast<int>(transform.geocord.altitude)) + "m");
 }
 
 void Platform::start(){
@@ -544,15 +552,15 @@ void Platform::Decision(){
         if (weaponrelease == WeaponRelease::AUTOMATIC || weaponrelease == WeaponRelease::WEAPON_FREE) {
             ////ExecuteFireSequence(primaryTarget); // Target ko shoot karo
             /*if (weapons)*/ {
-                for (auto const& pair : *weapons.weapons) {
-                    Weapon* w = pair.second;
-                    if (w  && !w->isLaunched) {
-                        w->setTarget(&primaryTarget->transform,3000);
-                        w->missileStart();
-                        weapons.weapons->erase(pair.first);
-                        break;
-                    }
-                }
+                // for (auto const& pair : *weapons.weapons) {
+                //     Weapon* w = pair.second;
+                //     if (w  && !w->isLaunched) {
+                //         w->setTarget(&primaryTarget->transform,3000);
+                //         w->missileStart();
+                //         weapons.weapons->erase(pair.first);
+                //         break;
+                //     }
+                // }
             }
         }
         else if (weaponrelease == WeaponRelease::WEAPON_TIGHT) {
@@ -606,17 +614,17 @@ void Platform::fireMissile(){
         }
     }
 
-    if (/*weapons && */closestTarget!=nullptr && closestTarget->Active) {
-        for (auto const& pair : *weapons.weapons) {
-            Weapon* w = pair.second;
-            if (w  && !w->isLaunched) {
-                w->setTarget(&closestTarget->transform,3000);
-                w->missileStart();
-                weapons.weapons->erase(pair.first);
-                break;
-            }
-        }
-    }
+    // if (/*weapons && */closestTarget!=nullptr && closestTarget->Active) {
+    //     for (auto const& pair : *weapons.weapons) {
+    //         Weapon* w = pair.second;
+    //         if (w  && !w->isLaunched) {
+    //             w->setTarget(&closestTarget->transform,3000);
+    //             w->missileStart();
+    //             weapons.weapons->erase(pair.first);
+    //             break;
+    //         }
+    //     }
+    // }
 }
 
 void Platform::spawn() {
@@ -626,19 +634,19 @@ void Platform::spawn() {
 }
 
 void Platform::addParam(std::string key,std::string value){
-    customParameters[QString::fromStdString(key)] = QString::fromStdString(value);
+    AdditionalParameters[QString::fromStdString(key)] = QString::fromStdString(value);
 }
 
 void Platform::editParam(std::string key,std::string value){
-    customParameters[QString::fromStdString(key)] = QString::fromStdString(value);
+    AdditionalParameters[QString::fromStdString(key)] = QString::fromStdString(value);
 }
 
 std::string Platform::getParam(std::string key){
-    return customParameters[QString::fromStdString(key)].toString().toStdString();
+    return AdditionalParameters[QString::fromStdString(key)].toString().toStdString();
 }
 
 void Platform::removeParam(std::string key){
-    customParameters.remove(QString::fromStdString(key));
+    AdditionalParameters.remove(QString::fromStdString(key));
 }
 
 std::vector<std::string> Platform::getSupportedComponents() {
@@ -749,47 +757,19 @@ QJsonObject Platform::toJson() const {
     obj["SubCategory"] = subCategoryObj;
 
 
-    // QJsonObject paramMap;
-    // for (const auto& [key, param] : parameters) {
-    //     if (param) {
-    //         paramMap[QString::fromStdString(key)] = param->toJson();
-    //     }
-    // }
 
-    // QJsonObject parObj;
-    // parObj["type"] = "parameter";
-    // parObj["value"] = paramMap;
-    // obj["parameters"] = parObj;
-
-    /*if (transform)*/ obj["transform"] = transform.toJson();
-    /*if (trajectory)*/ obj["trajectory"] = trajectory.toJson();
-    /*if (crossSection)*/ obj["crossSection"] = crossSection.toJson();
+    obj["transform"] = transform.toJson();
+    obj["trajectory"] = trajectory.toJson();
+    obj["crossSection"] = crossSection.toJson();
     obj["disType"] = disType.toJson();//by aman
-    /*if (rigidbody)*/ obj["rigidbody"] = rigidbody.toJson();
-    /*if (dynamicModel) */obj["dynamicModel"] = dynamicModel.toJson();
-    /*if (collider)*/ obj["collider"] = collider.toJson();
-    /*if (meshRenderer2d)*/ obj["bitmap"] = meshRenderer2d.toJson();
-    /*if (sensors)*/ obj["sensors"] = sensors.toJson();
-    /*if (iffs)*/ obj["iffs"] = iffs.toJson();
-    /*if (radios)*/ obj["radios"] = radios.toJson();
-    /*if (weapons)*/ obj["weapons"] = weapons.toJson();
-    // QJsonArray radioArray;
-    // for (Radio* r : radioList) {
-    //     if (r) radioArray.append(r->toJson());
-    // }
-    // obj["radios"] = radioArray;
-
-    // // QJsonArray sensorArray;
-    // // for (Sensor* s : sensorList) {
-    // //     if (s) sensorArray.append(s->toJson());
-    // // }
-    // // obj["sensors"] = sensorArray;
-
-    // QJsonArray iffArray;
-    // for (IFF* i : iffList) {
-    //     if (i) iffArray.append(i->toJson());
-    // }
-    // obj["iffs"] = iffArray;
+    obj["rigidbody"] = rigidbody.toJson();
+    obj["dynamicModel"] = dynamicModel.toJson();
+    obj["collider"] = collider.toJson();
+    obj["bitmap"] = meshRenderer2d.toJson();
+    obj["sensors"] = sensors.toJson();
+    obj["iffs"] = iffs.toJson();
+    obj["radios"] = radios.toJson();
+    obj["weapons"] = weapons.toJson();
 
     QJsonObject entityObj;
     entityObj["type"] = "option";
@@ -801,10 +781,9 @@ QJsonObject Platform::toJson() const {
     entityObj["value"] = entityTypeToString(type);
     obj["type"] = entityObj;
 
-    // Include custom parameters
-    // for (auto it = customParameters.begin(); it != customParameters.end(); ++it) {
-    //     obj[it.key()] = it.value();
-    // }
+    QJsonObject AddParameters = AdditionalParameters;
+    AddParameters["type"] = "Section";
+    obj["AdditionalParameters"] = AddParameters;
 
     return obj;
 }
@@ -992,7 +971,9 @@ void Platform::fromJson(const QJsonObject& obj) {
         weapons.fromJson(obj["weapons"].toObject());
     }
 
-
+    if(obj.contains("AdditionalParameters")){
+        AdditionalParameters = obj["AdditionalParameters"].toObject();
+    }
 
 }
 

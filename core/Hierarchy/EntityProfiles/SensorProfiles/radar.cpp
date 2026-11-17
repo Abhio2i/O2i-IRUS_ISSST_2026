@@ -435,7 +435,7 @@ QJsonObject Radar::toJson() const
     obj["id"]         = QString::fromStdString(ID);
     obj["name"]       = QString::fromStdString(Name);
     obj["Active"]     = Active;
-    obj["SensorType"] = "Radar";
+    obj["SensorType"] = "Generic";
 
     // --- Transmitter (unchanged) ---
     QJsonObject transmitter;

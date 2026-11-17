@@ -21,6 +21,7 @@ signals:
     void deleteAllWaypointsRequested();
     void finishAndSaveRequested();
     void cancelEditRequested();
+    void applyPatternRequested(const QString& pattern);
 
 private:
     QMenu* m_menu = nullptr;
@@ -30,6 +31,7 @@ private:
     QAction* m_saveAction = nullptr;
     QAction* m_cancelAction = nullptr;
     int m_currentIndex = -1;
+    QMenu* m_patternMenu = nullptr;
 };
 
 #endif // TRAJECTORY_CONTEXT_MENU_H

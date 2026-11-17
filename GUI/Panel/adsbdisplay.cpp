@@ -231,7 +231,7 @@ void ADSBDisplay::paintEvent(QPaintEvent * /*event*/)
             // --- Aircraft Shape Drawing ---
             p.save(); // Current painter state save karein[cite: 2]
             p.translate(tx, ty); // Painter ko aircraft ke center position par le jayein[cite: 2]
-            p.rotate(t.angle); // Aircraft ko uske heading angle par rotate karein[cite: 2]
+            p.rotate(t.track); // Aircraft ko uske heading angle par rotate karein[cite: 2]
 
             // Hover ke hisaab se color set karein
             if (i == hoveredTargetIndex) {
@@ -273,8 +273,8 @@ void ADSBDisplay::paintEvent(QPaintEvent * /*event*/)
                 // 1. Pehle saare strings prepare kar lete hain (Formatting)
                 QString angleText = QString("Angle: %1°").arg(t.angle, 0, 'f', 1);
                 QString distText  = QString("Dist: %1km").arg(t.radius, 0, 'f', 1);
-                QString callSign  = QString("CallSign: %1").arg(QString::fromStdString(t.call_sign));
-                QString hexId     = QString("Hex: %1").arg(QString::fromStdString(t.hex_ident));
+                // QString callSign  = QString("CallSign: %1").arg(QString::fromStdString(t.call_sign));
+                // QString hexId     = QString("Hex: %1").arg(QString::fromStdString(t.hex_ident));
                 QString flightId  = QString("Flight: %1").arg(QString::fromStdString(t.fligh_Id));
 
                 // Dynamic Data
@@ -297,8 +297,8 @@ void ADSBDisplay::paintEvent(QPaintEvent * /*event*/)
                 int gap = 15;      // Har line ke beech ka gap
 
                 // Text Render Karein
-                p.drawText(x, y,          callSign);
-                p.drawText(x, y += gap,  hexId);
+                // p.drawText(x, y,          callSign);
+                // p.drawText(x, y += gap,  hexId);
                 p.drawText(x, y += gap,  flightId);
                 p.drawText(x, y += gap,  altText);
                 p.drawText(x, y += gap,  gsText);

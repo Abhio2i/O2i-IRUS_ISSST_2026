@@ -33,6 +33,59 @@
 #include <QFrame>
 #include <QDialogButtonBox>
 #include <QTimer>
+#include <QAbstractSpinBox>
+#include <QComboBox>
+#include <QEvent>
+#include <QWheelEvent>
+#include <QCoreApplication>
+#include <QAbstractScrollArea>
+
+namespace {
+class WheelGuard : public QObject
+{
+public:
+    explicit WheelGuard(QObject *parent) : QObject(parent) {}
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override
+    {
+        if (event->type() == QEvent::Wheel) {
+            QWidget *w = qobject_cast<QWidget*>(obj);
+            if (w) {
+                QWidget *p = w->parentWidget();
+                while (p && !qobject_cast<QAbstractScrollArea*>(p->parentWidget())
+                       && !qobject_cast<QAbstractScrollArea*>(p)) {
+                    p = p->parentWidget();
+                }
+                if (p)
+                    QCoreApplication::sendEvent(p, event);
+                return true;
+            }
+        }
+        return QObject::eventFilter(obj, event);
+    }
+};
+
+void guardWheel(QWidget *root)
+{
+    WheelGuard *guard = new WheelGuard(root);
+
+    auto install = [guard](QWidget *w) {
+        w->setFocusPolicy(Qt::StrongFocus);
+        w->installEventFilter(guard);
+    };
+
+    for (QAbstractSpinBox *sb : root->findChildren<QAbstractSpinBox*>()) {
+        install(sb);
+        if (sb->findChild<QLineEdit*>())
+            sb->findChild<QLineEdit*>()->installEventFilter(guard);
+    }
+    for (QComboBox *cb : root->findChildren<QComboBox*>()) {
+        install(cb);
+        if (cb->lineEdit())
+            cb->lineEdit()->installEventFilter(guard);
+    }
+}
+}
 
 CustomTrajectoryDialog::CustomTrajectoryDialog(QWidget *parent)
     : QDialog(parent)
@@ -46,32 +99,53 @@ CustomTrajectoryDialog::CustomTrajectoryDialog(QWidget *parent)
 void CustomTrajectoryDialog::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    // ---------- First Row: Waypoints + Shape ----------
     QWidget *firstRowWidget = new QWidget(this);
     QHBoxLayout *firstRowLayout = new QHBoxLayout(firstRowWidget);
     QHBoxLayout *waypointsLayout = new QHBoxLayout();
     waypointsLayout->addWidget(new QLabel("No. of Waypoints:", this));
+
     waypointsSpinBox = new QSpinBox(this);
     waypointsSpinBox->setRange(2, 100);
     waypointsSpinBox->setValue(9);
     waypointsSpinBox->setFixedWidth(60);
     waypointsLayout->addWidget(waypointsSpinBox);
+
     waypointsLayout->addSpacing(10);
     waypointsLayout->addWidget(new QLabel("Shape:", this));
+
     shapesComboBox = new QComboBox(this);
-    shapesComboBox->addItems({"Line", "Zigzag", "Spiral", "Circle"});
+    shapesComboBox->addItems({
+        "Line",
+        "Zigzag",
+        "Spiral",
+        "Circle",
+        "Rectangle",
+        "Oval",
+        "Circular",
+        "Racecourse",
+        "Ellipse"
+    });
     shapesComboBox->setFixedWidth(120);
     waypointsLayout->addWidget(shapesComboBox);
     waypointsLayout->addStretch();
+
     firstRowLayout->addLayout(waypointsLayout);
     mainLayout->addWidget(firstRowWidget);
+
+    // Separator
     QFrame *hline = new QFrame();
     hline->setFrameShape(QFrame::HLine);
     hline->setFrameShadow(QFrame::Sunken);
     mainLayout->addWidget(hline);
+
     connect(shapesComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CustomTrajectoryDialog::onShapeChanged);
+
+    // ---------- Line / Zigzag / Rectangle Parameters ----------
     lineGroupBox = new QGroupBox("Line Parameters", this);
     QVBoxLayout *lineLayout = new QVBoxLayout();
+
     QHBoxLayout *lengthLayout = new QHBoxLayout();
     lengthLayout->addWidget(new QLabel("Length:", this));
     lengthSpinBox = new QDoubleSpinBox(this);
@@ -81,10 +155,14 @@ void CustomTrajectoryDialog::setupUI()
     lengthLayout->addWidget(lengthSpinBox);
     lengthLayout->addStretch();
     lineLayout->addLayout(lengthLayout);
+
     lineGroupBox->setLayout(lineLayout);
     mainLayout->addWidget(lineGroupBox);
+
+    // ---------- Circle / Spiral Parameters ----------
     circleGroupBox = new QGroupBox("Circle Parameters", this);
     QVBoxLayout *circleLayout = new QVBoxLayout();
+
     QHBoxLayout *radiusLayout = new QHBoxLayout();
     radiusLayout->addWidget(new QLabel("Radius:", this));
     radiusSpinBox = new QDoubleSpinBox(this);
@@ -94,25 +172,31 @@ void CustomTrajectoryDialog::setupUI()
     radiusLayout->addWidget(radiusSpinBox);
     radiusLayout->addStretch();
     circleLayout->addLayout(radiusLayout);
+
     QHBoxLayout *startPointLayout = new QHBoxLayout();
     startPointLayout->addWidget(new QLabel("Start Point:", this));
     startPointComboBox = new QComboBox(this);
-    startPointComboBox->addItems({"center","intial"});
+    startPointComboBox->addItems({"center", "initial"});
     startPointLayout->addWidget(startPointComboBox);
     startPointLayout->addStretch();
     circleLayout->addLayout(startPointLayout);
+
     QHBoxLayout *circlePointLayout = new QHBoxLayout();
-    circlePointLayout->addWidget(new QLabel("Circle Point:", this));
+    circlePointLayout->addWidget(new QLabel("Direction:", this));
     circlePointComboBox = new QComboBox(this);
     circlePointComboBox->addItems({"Clockwise", "Anti-clockwise"});
     circlePointLayout->addWidget(circlePointComboBox);
     circlePointLayout->addStretch();
     circleLayout->addLayout(circlePointLayout);
+
     circleGroupBox->setLayout(circleLayout);
     circleGroupBox->setVisible(false);
     mainLayout->addWidget(circleGroupBox);
+
+    // ---------- Oval Parameters ----------
     ovalGroupBox = new QGroupBox("Oval Parameters", this);
     QVBoxLayout *ovalLayout = new QVBoxLayout();
+
     QHBoxLayout *majorAxisLayout = new QHBoxLayout();
     majorAxisLayout->addWidget(new QLabel("Major Axis:", this));
     majorAxisSpinBox = new QDoubleSpinBox(this);
@@ -122,6 +206,7 @@ void CustomTrajectoryDialog::setupUI()
     majorAxisLayout->addWidget(majorAxisSpinBox);
     majorAxisLayout->addStretch();
     ovalLayout->addLayout(majorAxisLayout);
+
     QHBoxLayout *minorAxisLayout = new QHBoxLayout();
     minorAxisLayout->addWidget(new QLabel("Minor Axis:", this));
     minorAxisSpinBox = new QDoubleSpinBox(this);
@@ -131,6 +216,7 @@ void CustomTrajectoryDialog::setupUI()
     minorAxisLayout->addWidget(minorAxisSpinBox);
     minorAxisLayout->addStretch();
     ovalLayout->addLayout(minorAxisLayout);
+
     QHBoxLayout *orientationLayout = new QHBoxLayout();
     orientationLayout->addWidget(new QLabel("Orientation:", this));
     orientationComboBox = new QComboBox(this);
@@ -138,9 +224,12 @@ void CustomTrajectoryDialog::setupUI()
     orientationLayout->addWidget(orientationComboBox);
     orientationLayout->addStretch();
     ovalLayout->addLayout(orientationLayout);
+
     ovalGroupBox->setLayout(ovalLayout);
     ovalGroupBox->setVisible(false);
     mainLayout->addWidget(ovalGroupBox);
+
+    // ---------- Speed Configuration ----------
     speedGroupBox = new QGroupBox("Speed Configuration", this);
     QVBoxLayout *speedLayout = new QVBoxLayout();
 
@@ -148,35 +237,30 @@ void CustomTrajectoryDialog::setupUI()
     speedCheckBox->setChecked(true);
     speedLayout->addWidget(speedCheckBox);
 
-    // Min/Max speed
     QHBoxLayout *minSpeedLayout = new QHBoxLayout();
-    minSpeedLayout->addWidget(new QLabel("start Speed:", this));
+    minSpeedLayout->addWidget(new QLabel("Start Speed:", this));
     minSpeedSpinBox = new QDoubleSpinBox(this);
     minSpeedSpinBox->setRange(0, 1000);
     minSpeedSpinBox->setValue(800);
     minSpeedSpinBox->setSuffix(" km/h");
-    connect(minSpeedSpinBox, &QDoubleSpinBox::editingFinished,
-            this, [=]() {
-                if(minSpeedSpinBox->value() > maxSpeedSpinBox->value()){
-                    minSpeedSpinBox->setValue(maxSpeedSpinBox->value());
-                }
-            });
+    connect(minSpeedSpinBox, &QDoubleSpinBox::editingFinished, this, [=]() {
+        if (minSpeedSpinBox->value() > maxSpeedSpinBox->value())
+            minSpeedSpinBox->setValue(maxSpeedSpinBox->value());
+    });
     minSpeedLayout->addWidget(minSpeedSpinBox);
     minSpeedLayout->addStretch();
     speedLayout->addLayout(minSpeedLayout);
 
     QHBoxLayout *maxSpeedLayout = new QHBoxLayout();
-    maxSpeedLayout->addWidget(new QLabel("end Speed:", this));
+    maxSpeedLayout->addWidget(new QLabel("End Speed:", this));
     maxSpeedSpinBox = new QDoubleSpinBox(this);
     maxSpeedSpinBox->setRange(0, 5000);
     maxSpeedSpinBox->setValue(2500);
     maxSpeedSpinBox->setSuffix(" km/h");
-    connect(maxSpeedSpinBox, &QDoubleSpinBox::editingFinished,
-            this, [=]() {
-                if(maxSpeedSpinBox->value() < minSpeedSpinBox->value()){
-                    maxSpeedSpinBox->setValue(minSpeedSpinBox->value());
-                }
-            });
+    connect(maxSpeedSpinBox, &QDoubleSpinBox::editingFinished, this, [=]() {
+        if (maxSpeedSpinBox->value() < minSpeedSpinBox->value())
+            maxSpeedSpinBox->setValue(minSpeedSpinBox->value());
+    });
     maxSpeedLayout->addWidget(maxSpeedSpinBox);
     maxSpeedLayout->addStretch();
     speedLayout->addLayout(maxSpeedLayout);
@@ -186,7 +270,7 @@ void CustomTrajectoryDialog::setupUI()
             this, &CustomTrajectoryDialog::onSpeedCheckboxChanged);
     mainLayout->addWidget(speedGroupBox);
 
-    // Altitude group
+    // ---------- Altitude Configuration ----------
     altitudeGroupBox = new QGroupBox("Altitude Configuration", this);
     QVBoxLayout *altitudeLayout = new QVBoxLayout();
 
@@ -200,71 +284,95 @@ void CustomTrajectoryDialog::setupUI()
     minAltitudeSpinBox->setRange(0, 50000);
     minAltitudeSpinBox->setValue(1000);
     minAltitudeSpinBox->setSuffix(" ft");
-    connect(minAltitudeSpinBox, &QDoubleSpinBox::editingFinished,
-            this, [=]() {
-                if(minAltitudeSpinBox->value() > maxAltitudeSpinBox->value()){
-                    minAltitudeSpinBox->setValue(maxAltitudeSpinBox->value());
-                }
-            });
+    connect(minAltitudeSpinBox, &QDoubleSpinBox::editingFinished, this, [=]() {
+        if (minAltitudeSpinBox->value() > maxAltitudeSpinBox->value())
+            minAltitudeSpinBox->setValue(maxAltitudeSpinBox->value());
+    });
     minaltitudeValueLayout->addWidget(minAltitudeSpinBox);
     minaltitudeValueLayout->addStretch();
     altitudeLayout->addLayout(minaltitudeValueLayout);
+
     QHBoxLayout *maxaltitudeValueLayout = new QHBoxLayout();
     maxaltitudeValueLayout->addWidget(new QLabel("End Altitude:", this));
     maxAltitudeSpinBox = new QDoubleSpinBox(this);
     maxAltitudeSpinBox->setRange(0, 50000);
     maxAltitudeSpinBox->setValue(10000);
     maxAltitudeSpinBox->setSuffix(" ft");
-    connect(maxAltitudeSpinBox, &QDoubleSpinBox::editingFinished,
-            this, [=]() {
-                if(maxAltitudeSpinBox->value() < minAltitudeSpinBox->value()){
-                    maxAltitudeSpinBox->setValue(minAltitudeSpinBox->value());
-                }
-            });
+    connect(maxAltitudeSpinBox, &QDoubleSpinBox::editingFinished, this, [=]() {
+        if (maxAltitudeSpinBox->value() < minAltitudeSpinBox->value())
+            maxAltitudeSpinBox->setValue(minAltitudeSpinBox->value());
+    });
     maxaltitudeValueLayout->addWidget(maxAltitudeSpinBox);
     maxaltitudeValueLayout->addStretch();
     altitudeLayout->addLayout(maxaltitudeValueLayout);
+
     altitudeGroupBox->setLayout(altitudeLayout);
     connect(altitudeCheckBox, &QCheckBox::stateChanged,
             this, &CustomTrajectoryDialog::onAltitudeCheckboxChanged);
     mainLayout->addWidget(altitudeGroupBox);
+
+    // ---------- Buttons ----------
     QDialogButtonBox *buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     mainLayout->addWidget(buttonBox);
+    guardWheel(this);
+
+    // Initial state
+    onShapeChanged(0);
 }
 
 void CustomTrajectoryDialog::onShapeChanged(int index)
 {
     QString shape = shapesComboBox->itemText(index);
-    bool showLine = (shape == "Line" || shape == "Zigzag" || shape == "Rectangle");
+
+    bool showLine   = (shape == "Line" || shape == "Zigzag" || shape == "Rectangle" || shape == "Racecourse");
+    bool showCircle = (shape == "Circle" || shape == "Spiral" || shape == "Circular");
+    bool showOval   = (shape == "Oval" || shape == "Ellipse");
+
     lineGroupBox->setVisible(showLine);
-    bool showCircle = (shape == "Circle" || shape == "Spiral");
     circleGroupBox->setVisible(showCircle);
-    bool showOval = (shape == "Oval");
     ovalGroupBox->setVisible(showOval);
+
+    // Update titles
     if (shape == "Line") {
         lineGroupBox->setTitle("Line Parameters");
-    } else if (shape == "Zigzag") {
-        lineGroupBox->setTitle("Zigzag Parameters");
-    } else if (shape == "Rectangle") {
-        lineGroupBox->setTitle("Rectangle Parameters");
-    } else if (shape == "Circle") {
-        circleGroupBox->setTitle("Circle Parameters");
-    } else if (shape == "Spiral") {
-        ovalGroupBox->setTitle("Spiral Parameters");
     }
+    else if (shape == "Zigzag") {
+        lineGroupBox->setTitle("Zigzag Parameters");
+    }
+    else if (shape == "Rectangle") {
+        lineGroupBox->setTitle("Rectangle Parameters");
+    }
+    else if (shape == "Racecourse") {
+        lineGroupBox->setTitle("Racecourse Parameters");
+    }
+    else if (shape == "Circle") {
+        circleGroupBox->setTitle("Circle Parameters");
+    }
+    else if (shape == "Spiral") {
+        circleGroupBox->setTitle("Spiral Parameters");
+    }
+    else if (shape == "Circular") {
+        circleGroupBox->setTitle("Circular Parameters");
+    }
+    else if (shape == "Oval") {
+        ovalGroupBox->setTitle("Oval Parameters");
+    }
+    else if (shape == "Ellipse") {
+        ovalGroupBox->setTitle("Ellipse Parameters");
+    }
+
     QTimer::singleShot(10, this, [this]() {
         adjustSize();
-
-        if (width() < 400) {
-            setMinimumWidth(400);
+        if (width() < 420) {
+            setMinimumWidth(420);
             adjustSize();
         }
+
     });
 }
-
 void CustomTrajectoryDialog::onSpeedCheckboxChanged(int state)
 {
     bool enabled = (state == Qt::Checked);
@@ -334,8 +442,6 @@ double CustomTrajectoryDialog::getMaxAltitude() const
 {
     return maxAltitudeSpinBox->value();
 }
-
-
 double CustomTrajectoryDialog::getMinSpeed() const
 {
     return minSpeedSpinBox->value();
@@ -359,4 +465,43 @@ bool CustomTrajectoryDialog::isAltitudeEnabled() const
 bool CustomTrajectoryDialog::isSpeedEnabled() const
 {
     return speedCheckBox->isChecked();
+}
+TrajectoryConfig CustomTrajectoryDialog::snapshot() const
+{
+    TrajectoryConfig c;
+    c.waypoints        = waypointsSpinBox->value();
+    c.shapeIndex       = shapesComboBox->currentIndex();
+    c.length           = lengthSpinBox->value();
+    c.radius           = radiusSpinBox->value();
+    c.majorAxis        = majorAxisSpinBox->value();
+    c.minorAxis        = minorAxisSpinBox->value();
+    c.orientationIndex = orientationComboBox->currentIndex();
+    c.startPointIndex  = startPointComboBox->currentIndex();
+    c.circlePointIndex = circlePointComboBox->currentIndex();
+    c.speedEnabled     = speedCheckBox->isChecked();
+    c.altitudeEnabled  = altitudeCheckBox->isChecked();
+    c.minSpeed         = minSpeedSpinBox->value();
+    c.maxSpeed         = maxSpeedSpinBox->value();
+    c.minAltitude      = minAltitudeSpinBox->value();
+    c.maxAltitude      = maxAltitudeSpinBox->value();
+    return c;
+}
+
+void CustomTrajectoryDialog::restore(const TrajectoryConfig &c)
+{
+    waypointsSpinBox->setValue(c.waypoints);
+    shapesComboBox->setCurrentIndex(c.shapeIndex);
+    lengthSpinBox->setValue(c.length);
+    radiusSpinBox->setValue(c.radius);
+    majorAxisSpinBox->setValue(c.majorAxis);
+    minorAxisSpinBox->setValue(c.minorAxis);
+    orientationComboBox->setCurrentIndex(c.orientationIndex);
+    startPointComboBox->setCurrentIndex(c.startPointIndex);
+    circlePointComboBox->setCurrentIndex(c.circlePointIndex);
+    speedCheckBox->setChecked(c.speedEnabled);
+    altitudeCheckBox->setChecked(c.altitudeEnabled);
+    minSpeedSpinBox->setValue(c.minSpeed);
+    maxSpeedSpinBox->setValue(c.maxSpeed);
+    minAltitudeSpinBox->setValue(c.minAltitude);
+    maxAltitudeSpinBox->setValue(c.maxAltitude);
 }

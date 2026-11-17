@@ -25,7 +25,5 @@ void main(ScriptEngine@ e)
     // Generate PDF
     // ==========================================
 
-    e.generatePDFReport(
-        "switchreport.pdf"
-    );
+    e.generatePDFReport("switchreport.pdf");
 }

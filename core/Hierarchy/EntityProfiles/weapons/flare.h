@@ -2,38 +2,49 @@
 #define FLARE_H
 
 #include "core/Hierarchy/EntityProfiles/weapon.h"
-
-class Flare : public Weapon
+class Flare: public Weapon
 {
     Q_OBJECT
 public:
     explicit Flare(Hierarchy* h);
+    ~Flare();
 
-    WeaponType weaponType = WeaponType::Flare;
-    QString weaponTypeName() const override { return "Flare"; }
+    float InitialIntensity = 0.5f;       // normalized (0-1)
+    float PeakIntensity = 1.0f;          // normalized (0-1)
+    float BurnDuration = 5.0f;           // seconds
+    float IntensityDecayRate = 0.2f;     // 1/s
+    float DeploymentVelocity = 10.0f;    // m/s
+    float DragCoefficient = 0.1f;        // dimensionless
+    float VisualBrightness = 1.0f;       // normalized (0-1)
 
-    float burnTemperature      = 2000.0f;
-    float burnDuration         = 5.0f;
-    float peakIrradiance       = 1500.0f;
-    float spectralMatch        = 0.95f;
-    float ejectionVelocity     = 15.0f;
-    float ejectionAngle        = 45.0f;
-    float ejectionSpread       = 10.0f;
-    void Update() override;
-    enum class DispensingMode { Single, Burst, Salvo, Auto };
-    DispensingMode dispensingMode  = DispensingMode::Burst;
-    int   burstCount               = 2;
-    float burstInterval            = 0.1f;
-    int   cartridgesRemaining      = 60;
-    float breakLockProbability     = 0.75f;
+    int ParticleCount = 100;
 
-    void        launch()                              override;
-    bool        canEngage(Platform *target)           override;
+    bool GravityEnabled = true;
+    bool SmokeEnabled = true;
+
+    void Update()override{};
+    void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
+    std::vector<std::string> getSupportedComponents() override;
+
+    void addSupportedcomponent() override;
+
+    void addComponent(std::string name) override;
+
+    void removeComponent(std::string name) override;
+
+    QJsonObject getComponent(std::string name) override;
+
+    void updateComponent(QString name, const QJsonObject& obj) override;
+
     QJsonObject toJson()                        const override;
     void        fromJson(const QJsonObject&)          override;
-
-    QString dispensingModeToString()          const;
-    void    setDispensingModeFromString(const QString&);
+    QJsonObject AdditionalParameters;   //!< User-defined extension parameters
+    void SaveState();
+    void RestoreState();
+private:
+    bool statesaved = false;
+    QJsonObject InitalState;
 };
 
 #endif // FLARE_H

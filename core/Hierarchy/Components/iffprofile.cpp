@@ -20,28 +20,111 @@ void IFFProfile::init(Entity *Entity){
 }
 void IFFProfile::Awake(){}
 void IFFProfile::Start(){}
-void IFFProfile::addSubComponent(std::string name, QString data1, QString data2, QJsonObject data3){
-    // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
-    if(!parentEntity->root)return;
-    if(data1 == "IFF"||data1.isLower()){
+// void IFFProfile::addSubComponent(std::string name, QString data1, QString data2, QJsonObject data3){
+//     // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
+//     if(!parentEntity->root)return;
+//     if(data1 == "IFF"||data1.isLower()){
+//         IFF* iff = new IFF(parentEntity->root);
+//         if(!data2.isEmpty()){
+//             std::string id = iff->ID;
+//             iff->fromJson(data3);
+//             iff->ID = id;
+//             iff->parentID = parentID;
+//         }
+//         iff->parentEntity = parentEntity;
+//         iff->Name = name;
+//         iffs.insert({iff->ID,iff});
+//         parentEntity->root->Iffs.insert({iff->ID,iff});
+//         emit parentEntity->root->subComponentAdded(QString::fromStdString(ID),QString::fromStdString(iff->ID),QString::fromStdString(name));
+//     }else{
+//         CustomIFFInterface* ciff = nullptr;
+//         if(parentEntity&&parentEntity->root){
+//             std::string iD = Uuid::generateShortUniqueID();
+//             emit parentEntity->root->getCustomIFF(QString::fromStdString(parentEntity->ID),parentEntity->ecsID,QString::fromStdString(iD),ciff);
+//             if(ciff){
+//                 CustomIFF* iff = new CustomIFF(parentEntity->root);
+//                 iff->ID = iD;
+//                 iff->parentEntity = parentEntity;
+//                 iff->iff = ciff;
+//                 iff->type = data1;
+//                 iff->Name = name;
+//                 iffs.insert({iff->ID, iff});
+//                 parentEntity->root->Iffs.insert({iff->ID,iff});
+//                 emit parentEntity->root->subComponentAdded(
+//                     QString::fromStdString(ID),
+//                     QString::fromStdString(iff->ID),
+//                     QString::fromStdString(name));
+//                 emit parentEntity->root->sensorAdded(QString::fromStdString(parentID), QString::fromStdString(iff->ID));
+//                 ciff->registerDestroyCallback([this,iD,iff](){
+//                     if(iff){
+//                         iff->iff = nullptr;
+//                     }
+//                     this->removeSubComponent(iD);
+//                 });
+
+//             }
+//         }
+
+//     }
+// }
+
+
+
+void IFFProfile::addSubComponent(std::string name, QString data1, QString data2, QJsonObject data3)
+{
+    if (!parentEntity || !parentEntity->root)
+        return;
+
+    if (data1 == "IFF" || data1.isLower()) {
+        if (!data2.isEmpty()) {
+            auto existingIt = iffs.find(data2.toStdString());
+            if (existingIt != iffs.end() && existingIt->second != nullptr) {
+                IFF* existing = existingIt->second;
+                existing->fromJson(data3);
+                existing->ID           = data2.toStdString();
+                existing->Name         = name;
+                existing->parentEntity = parentEntity;
+                existing->parentID     = parentID;
+                parentEntity->root->Iffs[data2.toStdString()] = existing;
+
+                // qDebug() << "[IFF PROFILE REUSE]"
+                //          << "ID =" << data2
+                //          << "Name =" << QString::fromStdString(name);
+                return;
+            }
+    }
         IFF* iff = new IFF(parentEntity->root);
-        if(!data2.isEmpty()){
+        if (!data2.isEmpty()) {
+
             std::string id = iff->ID;
             iff->fromJson(data3);
             iff->ID = id;
+            // iff->ID       = data2.toStdString();
             iff->parentID = parentID;
         }
         iff->parentEntity = parentEntity;
-        iff->Name = name;
-        iffs.insert({iff->ID,iff});
-        parentEntity->root->Iffs.insert({iff->ID,iff});
-        emit parentEntity->root->subComponentAdded(QString::fromStdString(ID),QString::fromStdString(iff->ID),QString::fromStdString(name));
-    }else{
+        iff->Name         = name;
+        iffs.insert({iff->ID, iff});
+        parentEntity->root->Iffs.insert({iff->ID, iff});
+        emit parentEntity->root->subComponentAdded(
+            QString::fromStdString(ID),
+            QString::fromStdString(iff->ID),
+            QString::fromStdString(name));
+        emit parentEntity->root->iffAdded(
+            QString::fromStdString(parentID),
+            QString::fromStdString(iff->ID));
+
+    } else {
+
         CustomIFFInterface* ciff = nullptr;
-        if(parentEntity&&parentEntity->root){
+        if (parentEntity && parentEntity->root) {
             std::string iD = Uuid::generateShortUniqueID();
-            emit parentEntity->root->getCustomIFF(QString::fromStdString(parentEntity->ID),parentEntity->ecsID,QString::fromStdString(iD),ciff);
-            if(ciff){
+            emit parentEntity->root->getCustomIFF(
+                QString::fromStdString(parentEntity->ID),
+                parentEntity->ecsID,
+                QString::fromStdString(iD),
+                ciff);
+            if (ciff) {
                 CustomIFF* iff = new CustomIFF(parentEntity->root);
                 iff->ID = iD;
                 iff->parentEntity = parentEntity;
@@ -49,36 +132,66 @@ void IFFProfile::addSubComponent(std::string name, QString data1, QString data2,
                 iff->type = data1;
                 iff->Name = name;
                 iffs.insert({iff->ID, iff});
-                parentEntity->root->Iffs.insert({iff->ID,iff});
+                parentEntity->root->Iffs.insert({iff->ID, iff});
                 emit parentEntity->root->subComponentAdded(
                     QString::fromStdString(ID),
                     QString::fromStdString(iff->ID),
                     QString::fromStdString(name));
-                emit parentEntity->root->sensorAdded(QString::fromStdString(parentID), QString::fromStdString(iff->ID));
-                ciff->registerDestroyCallback([this,iD,iff](){
-                    if(iff){
-                        iff->iff = nullptr;
-                    }
+                emit parentEntity->root->sensorAdded(
+                    QString::fromStdString(parentID),
+                    QString::fromStdString(iff->ID));
+                ciff->registerDestroyCallback([this, iD, iff]() {
+                    if (iff) iff->iff = nullptr;
                     this->removeSubComponent(iD);
                 });
-
             }
         }
-
     }
 }
 
-void IFFProfile::removeSubComponent(std::string ID){
-    // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
+
+// void IFFProfile::removeSubComponent(std::string ID){
+//     // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
+//     auto it = iffs.find(ID);
+//     if (it != iffs.end() && it->second != nullptr) {
+//         IFF *iff = it->second;
+//         emit parentEntity->root->subComponentRemoved(QString::fromStdString(this->ID),QString::fromStdString(ID),QString::fromStdString(iff->Name));
+//         iffs.erase(iff->ID);
+//         parentEntity->root->Iffs.erase(iff->ID);
+//         delete iff;
+//     }
+// }
+
+
+
+void IFFProfile::removeSubComponent(std::string ID)
+{
+    if (!parentEntity || !parentEntity->root)
+        return;
+
     auto it = iffs.find(ID);
-    if (it != iffs.end() && it->second != nullptr) {
-        IFF *iff = it->second;
-        emit parentEntity->root->subComponentRemoved(QString::fromStdString(this->ID),QString::fromStdString(ID),QString::fromStdString(iff->Name));
-        iffs.erase(iff->ID);
-        parentEntity->root->Iffs.erase(iff->ID);
-        delete iff;
-    }
+    if (it == iffs.end() || it->second == nullptr)
+        return;
+
+    IFF* iff = it->second;
+    const QString iffId   = QString::fromStdString(ID);
+    const QString iffName = QString::fromStdString(iff->Name);
+    const QString parentId = QString::fromStdString(parentID);
+
+    // Logger needs this FIRST
+    emit parentEntity->root->iffRemoved(parentId, iffId);
+
+    emit parentEntity->root->subComponentRemoved(
+        QString::fromStdString(this->ID),
+        iffId,
+        iffName);
+
+    iffs.erase(iff->ID);
+    parentEntity->root->Iffs.erase(iff->ID);
+    delete iff;
 }
+
+
 
 void IFFProfile::updateSubComponent(std::string ID, const QJsonObject& obj){
     auto it = iffs.find(ID);

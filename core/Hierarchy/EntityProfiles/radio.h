@@ -115,6 +115,8 @@ public:
     float bandwidth;
     float msgTimeStamp = 0;
     std::string msg = "";
+    bool displaySuppressedByJam = false;
+    bool isDisplaySuppressed() const { return displaySuppressedByJam; }
 
     // =========================================================================
     // SECTION: Tracking Data Structures
@@ -191,6 +193,7 @@ public:
     // DESCRIPTION: Entity lifecycle and component management.
     // =========================================================================
     void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
     std::vector<std::string> getSupportedComponents() override;
     void addSupportedcomponent() override;
     void addComponent(std::string name) override;
@@ -211,5 +214,19 @@ signals:
     void transmitterSnapshotReady(DISTransmitterSnapshot snap);
 
 };
+
+//! True when the platform has >=1 radio and every one is jam-suppressed.
+inline bool allRadiosDisplaySuppressed(const Platform* p)
+{
+    if (!p) return false;
+    bool any = false;
+    for (auto const& kv : p->radios.radios) {
+        const Radio* r = kv.second;
+        if (!r) continue;
+        if (!r->displaySuppressedByJam) return false;
+        any = true;
+    }
+    return any;
+}
 
 #endif // RADIO_H

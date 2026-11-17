@@ -177,6 +177,7 @@ private:
 
     Platform* resolvePlatform() const;
     Entity* resolveEntity() const;
+    void closeSubDialogs();
 };
 
 #endif // ENTITYINFODIALOG_H

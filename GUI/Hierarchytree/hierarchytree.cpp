@@ -65,11 +65,16 @@ protected:
         drag->exec(Qt::CopyAction, Qt::CopyAction);
     }
 };
-} // namespace
+}
 
 HierarchyTree::HierarchyTree(QWidget *parent)
     : QWidget(parent)
 {
+    profileIcon = new QIcon(":/icons/images/category.png");
+    folderIcon = new QIcon(":/icons/images/folder.png");
+    entityIcon = new QIcon(":/icons/images/entity.png");
+    componentIcon = new QIcon(":/icons/images/component.png");
+    subComponentIcon = new QIcon(":/icons/images/subcomponent.png");
     mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(0);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -450,7 +455,7 @@ void HierarchyTree::profileAdded(QString ID, QString profileName)
     updateProfileDropdown();
     QTreeWidgetItem *category = new QTreeWidgetItem(tree);
     category->setText(0, profileName);
-    category->setIcon(0, QIcon(":/icons/images/category.png"));
+    category->setIcon(0, *profileIcon);
     Items.insert(ID, category);
     QVariantMap data;
     data["ID"] = ID;
@@ -473,7 +478,7 @@ void HierarchyTree::folderAdded(QString parentID, QString ID, QString folderName
     }
     QTreeWidgetItem *folder = new QTreeWidgetItem(Items[parentID]);
     folder->setText(0, folderName);
-    folder->setIcon(0, QIcon(":/icons/images/folder.png"));
+    folder->setIcon(0, *folderIcon);
     Items.insert(ID, folder);
     QVariantMap data;
     data["ID"] = ID;
@@ -492,7 +497,7 @@ void HierarchyTree::entityAdded(QString parentID, QString ID, QString entityName
     }
     QTreeWidgetItem *entity = new QTreeWidgetItem(Items[parentID]);
     entity->setText(0, entityName);
-    entity->setIcon(0, QIcon(":/icons/images/entity.png"));
+    entity->setIcon(0, *entityIcon);
     Items.insert(ID, entity);
     QVariantMap data;
     data["ID"] = ID;
@@ -501,6 +506,7 @@ void HierarchyTree::entityAdded(QString parentID, QString ID, QString entityName
     data["type"] = HIT::EntityItem;
     entity->setData(0, Qt::UserRole, data);
     entity->setFlags(entity->flags() | Qt::ItemIsDragEnabled);
+
 }
 
 // void HierarchyTree::componentAdded(QString parentID, QString ID, QString componentName)
@@ -544,7 +550,6 @@ void HierarchyTree::componentAdded(QString parentID, QString ID, QString compone
         return;
     }
 
-    // 2. Check karo ki ye component already tree mein hai ya nahi
     for (int i = 0; i < parentItem->childCount(); ++i) {
 
         QTreeWidgetItem *child = parentItem->child(i);
@@ -565,7 +570,7 @@ void HierarchyTree::componentAdded(QString parentID, QString ID, QString compone
     }
     QTreeWidgetItem *component = new QTreeWidgetItem(parentItem);
     component->setText(0, displayName);
-    component->setIcon(0, QIcon(":/icons/images/component.png"));
+    component->setIcon(0, *componentIcon);
     Items.insert(ID, component);
     QVariantMap data;
     data["ID"] = ID;
@@ -589,7 +594,7 @@ void HierarchyTree::subComponentAdded(QString parentID, QString ID, QString subC
     }
     QTreeWidgetItem *subcomponent = new QTreeWidgetItem(Items[parentID]);
     subcomponent->setText(0, displayName);
-    subcomponent->setIcon(0, QIcon(":/icons/images/subcomponent.png"));
+    subcomponent->setIcon(0, *subComponentIcon);
     Items.insert(ID, subcomponent);
     QVariantMap data;
     data["ID"] = ID;
@@ -727,11 +732,6 @@ void HierarchyTree::componentRemoved(QString entityID, QString componentName)
 }
 
 
-
-
-
-
-
 // void HierarchyTree::subComponentRemoved(QString CompID,QString subCompID,QString componentName)
 // {
 //     if (!Items.contains(subCompID) || !Items.contains(CompID)) {
@@ -824,7 +824,7 @@ QString HierarchyTree::multiSelectMenuStyleSheet() const
     QMenu::item:selected {
         background-color: #0078D4;
         color: white;
-        border-radius: 2px;
+        border-radius: 2px;s
     }
     QMenu::icon {
         margin-left: 4px;
@@ -845,7 +845,6 @@ void HierarchyTree::showContextMenu(const QPoint &pos)
 {
     if (islib) return;
     QList<QTreeWidgetItem*> selectedItems = tree->selectedItems();
-
     if (selectedItems.size() > 1) {
         QMenu contextMenu(this);
         contextMenu.setStyleSheet(multiSelectMenuStyleSheet());
@@ -1075,7 +1074,6 @@ void HierarchyTree::showContextMenu(const QPoint &pos)
                 });
             }
         }
-
         contextMenu.exec(tree->viewport()->mapToGlobal(pos));
     }
     else {
@@ -1157,6 +1155,7 @@ void HierarchyTree::dropEvent(QDropEvent *event)
         event->ignore();
         return;
     }
+
     QVariantMap targetData = targetItem->data(0, Qt::UserRole).toMap();
     QString targetType;
     if (targetData["type"].type() == QVariant::Map) {
@@ -1277,7 +1276,6 @@ void HierarchyTree::renameEntityById(const QString& entityId, const QString& new
     QVariantMap data = Items[entityId]->data(0, Qt::UserRole).toMap();
     if (data["type"].toString() == HIT::ComponentItem)
         return;
-
     QVariantMap modifiedData = data;
     modifiedData["name"] = newName;
     emit contextMenu->renameItemRequested(modifiedData);
@@ -1301,7 +1299,6 @@ void HierarchyTree::removeEntityById(const QString& entityId)
 
     removeSelectedEntities();
 }
-
 
 void HierarchyTree::setLibraryFileName(const QString& fileName)
 {
@@ -1370,9 +1367,8 @@ void HierarchyTree::setEntityActiveState(const QString& entityId, bool active)
     if (!Items.contains(entityId)) return;
     QTreeWidgetItem* item = Items[entityId];
     if (!item) return;
-
     if (active) {
-        item->setForeground(0, QColor(255, 255, 255));
+        item->setData(0, Qt::ForegroundRole, QVariant());
         item->setToolTip(0, "");
     } else {
         item->setForeground(0, QColor(120, 120, 120));

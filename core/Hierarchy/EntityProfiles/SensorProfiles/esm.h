@@ -53,8 +53,43 @@
 #ifndef ESM_H
 #define ESM_H
 #include <QString>
+//Added by Vansh for Persistance cache in ESM
+#include <QHash>
+#include <QElapsedTimer>
+//Vansh
 #include "core/Hierarchy/EntityProfiles/sensor.h"
 #include "core/Hierarchy/EntityProfiles/SensorProfiles/ESM/esmrf.h"
+//added by Aman for jamming
+#include <cmath>
+struct ESMJammerConfig
+{
+    bool   enabled       = false;   // off by default: old scenarios unchanged
+    double powerKw       = 1.0;     // transmit power (kW)
+    double gainDbi       = 10.0;    // jammer antenna gain (dBi)
+    double centerFreqMHz = 8000.0;  // centre of the jammed band (MHz)
+    double bandwidthMHz  = 100.0;   // width of the jammed band (MHz)
+    double jamRangeKm    = 100.0;   // radars beyond this range are not jammed
+
+    bool isValid() const
+    {
+        auto in = [](double v, double lo, double hi) {
+            return std::isfinite(v) && v >= lo && v <= hi;
+        };
+        return in(powerKw,       0.0,     1000.0)
+               && in(gainDbi,     -20.0,       60.0)
+               && in(centerFreqMHz, 1.0,   100000.0)
+               && in(bandwidthMHz,  0.001,  10000.0)
+               && in(jamRangeKm,    0.1,      500.0);
+    }
+
+    // True when every frequency in [loMHz, hiMHz] lies inside
+    // centre +/- bandwidth/2.
+    bool coversBandMHz(double loMHz, double hiMHz) const
+    {
+        const double half = 0.5 * bandwidthMHz;
+        return loMHz >= centerFreqMHz - half && hiMHz <= centerFreqMHz + half;
+    }
+};
 
 /* One ESM detection.
  *  GEOMETRY (always valid): entity, angle [deg, (-180,180], cw from north],
@@ -115,9 +150,20 @@ public:
     bool hasSpectrum() const { return !specPsdDbm_.isEmpty(); }
     const QVector<double>& spectrumFreqMHz() const { return specAcc_.freqMHz(); }
     const QVector<double>& spectrumPsdDbmPerHz() const { return specPsdDbm_; }
-
+    // ===== [JAMMER] START - Added for ESM jammer, written by Aman =====
+    // Noise-jammer settings, edited via the "jammer" JSON section.
+    ESMJammerConfig jam;
+    const ESMJammerConfig& jammerConfig() const { return jam; }
+    // ===== [JAMMER] END =====
 private:
     void clearOutputs();
+
+    //Added persistance members by Vansh
+    // Beam-hit persistence: stores the last time each emitter illuminated ESM.
+    QHash<QString, qint64> beamHitMs_;
+    QElapsedTimer beamClock_;
+    //Vansh
+
     esmrf::SpectrumAccumulator specAcc_;
     QVector<double> specPsdDbm_;
 };

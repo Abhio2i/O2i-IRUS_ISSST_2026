@@ -129,7 +129,7 @@ ADSBSensor::ADSBSensor(Hierarchy* h) : Sensor(h) {
     });
 
     ownship.setReceiveCallback([this](const adsb::AdsbReceiveReport& r) {
-        // rxEvents.append({Simulation::simulationTime, r});
+        rxEvents.append({Simulation::simulationTime, r});
     });
 }
 
@@ -155,7 +155,7 @@ void ADSBSensor::scan(){
 
     {
         rf::RfConfig own_rf = ownship.getRfConfiguration();
-        own_rf.id = rf_id.empty() ? parentEntity->ID : rf_id;
+        own_rf.id = rf_id.empty()||rf_id == "OWN_ADSB" ? parentEntity->ID : rf_id;
         own_rf.parent_name = parentEntity->Name;
         own_rf.use_local_propagation_config = true;
 
@@ -180,12 +180,21 @@ void ADSBSensor::scan(){
 
     detect.clear();
     if (!rf_hits.empty()) {
-        std::cout << " Physical RF Hits:\n";
+        // std::cout << " Physical RF Hits:\n";
         for (const auto& h : rf_hits) {
             ADSBTarget target;
             try {
                 if ((root->Platforms)[h.id]) {
                     target.entity = (root->Platforms)[h.id];
+                    target.vx = target.entity->dynamicModel.velocity.x();
+                    target.vy = target.entity->dynamicModel.velocity.y();
+                    target.vz = target.entity->dynamicModel.velocity.z();
+                    target.track = target.entity->transform.getHeading();
+                    target.lat = target.entity->transform.getLatitude();
+                    target.lon = target.entity->transform.getLongitude();
+                    target.ground_speed = target.entity->dynamicModel.GroundVelocity;
+                    target.altitude = target.entity->transform.getAltitude();
+
                 }else{
                     target.entity = nullptr;
                 }
@@ -195,14 +204,25 @@ void ADSBSensor::scan(){
             }
             target.angle = h.azimuth_deg;//-((h.azimuth_deg+h)+180.f);
             target.radius = h.distance_m/1000.f;
-            detect.append(target);
 
+            auto it = std::find_if(rxEvents.begin(), rxEvents.end(),
+                                   [&h](const auto& event) {
+                                       return event.report.track.last_report.sender_id == h.id;
+                                   });
+
+            if (it == rxEvents.end()){
+                const auto& track = it->report.track;
+                target.call_sign = track.static_data.flight_id;
+                target.emitter_category = track.static_data.emitter_category;
+            }
+            detect.append(target);
             // std::cout << "  ID=" << h.id
             //           << " Dist=" << h.distance_m
             //           << "m Rx=" << h.rx_power_dbm
             //           << "dBm SNR=" << h.snr_db
             //           << "dB\n";
         }
+    rxEvents.clear();
     }
 
     // if ((Simulation::simulationTime - lastPrintTime) >= 1.0f) {

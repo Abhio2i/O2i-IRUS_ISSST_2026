@@ -23,8 +23,8 @@
 #include "GUI/Editors/analysiseditor.h"
 #include <QProgressBar>
 #include <GUI/statusbar.h>
-#include <QDateTime>          // ARTI CHANGE: needed for scenario->runtime staleness tracking (mtime compare)
-#include <QSet>               // ARTI CHANGE: needed for per-target pending entity-sync sets
+#include <QDateTime>
+#include <QSet>
 
 class MainWindow : public QMainWindow
 {
@@ -59,6 +59,9 @@ public:
     StatusBar *m_statusBar = nullptr;
     QString ensureTDFSubfolder(const QString& subfolderName) const;
     QString associatedDatabasePathForHierarchy(Hierarchy* hier) const;
+    void restartApplication();
+    bool loadDatabaseIntoEditor(const QString& dbPath);
+    bool isDatabaseLoadedInEditor(const QString& dbPath) const;
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -92,7 +95,7 @@ private:
                                QString& editorName, QString& lastSavedFilePath) const;
     void clearUnsavedForEditor(QMainWindow* editor);
 
-    // ---- titles ----
+    // ------------------------------ titles ------------------------------
     void updateWindowTitleForCurrentEditor();
     void updateWindowTitle(const QString& editorName, bool hasUnsavedChanges);
     QString buildTitleSuffixForEditor(QMainWindow* currentWidget, const QString& editorName) const;
@@ -158,5 +161,6 @@ private:
     QJsonObject m_runtimeGisSnapshot;
     bool m_hasScenarioGisSnapshot = false;
     bool m_hasRuntimeGisSnapshot  = false;
+
 };
 #endif // MAINWINDOW_H

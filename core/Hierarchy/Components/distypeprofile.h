@@ -123,7 +123,6 @@ private:
     QJsonArray subcategoryOptions() const;
     QJsonArray specificOptions() const;
     QJsonArray extraOptions() const;
-
     QString kindName(uint8_t value) const;
     QString domainName(uint8_t value) const;
     QString countryName(uint16_t value) const;
@@ -131,17 +130,10 @@ private:
     QString subcategoryName(uint8_t value) const;
     QString specificName(uint8_t value) const;
     QString extraName(uint8_t value) const;
-
-    // Extracts the leading integer from a "NNN - Name" display string, or
-    // a plain numeric string. Used to parse dropdown/edited values back
-    // into raw SISO codes.
     static uint16_t parseLeadingNumber(const QString& displayValue);
-
-    // Given a reference table and a numeric value, returns "value - Name"
-    // if found, or the bare numeric value if not found (e.g. because that
-    // branch of siso_reference_data.json hasn't been populated yet).
     static QString formatEntry(const std::vector<DISRefEntry>& table,
                                uint16_t value, int padWidth);
+
 };
 
 #endif // DISTYPEPROFILE_H

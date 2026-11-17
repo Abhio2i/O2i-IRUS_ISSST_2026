@@ -2086,30 +2086,100 @@ bool SQLite::insertIffDetails(int frameIndex, const IffList &list)
     return true;
 }
 
+// bool SQLite::insertIffCRUD(int frameIndex, const IffCRUDList &list)
+// {
+//     QSqlQuery q(database());
+//     q.prepare("INSERT INTO iffCRUD (operation,indexNo,frameIndex) VALUES (:op,:idx,:fi)");
+//     for (const auto &c : list) {
+//         q.bindValue(":op",  c.operation);
+//         q.bindValue(":idx", c.index);
+//         q.bindValue(":fi",  frameIndex);
+//         if (!q.exec()) { qCritical() << "insertIffCRUD:" << q.lastError(); return false; }
+//     }
+//     return true;
+// }
+
+
 bool SQLite::insertIffCRUD(int frameIndex, const IffCRUDList &list)
 {
-    QSqlQuery q(database());
-    q.prepare("INSERT INTO iffCRUD (operation,indexNo,frameIndex) VALUES (:op,:idx,:fi)");
+    QSqlQuery query(database());
+    query.prepare(R"(
+        INSERT INTO iffCRUD
+        (operation, indexNo, frameIndex)
+        VALUES
+        (:operation, :indexNo, :frameIndex)
+    )");
+
+    QSqlQuery deleteMarkQuery(database());
+    deleteMarkQuery.prepare(R"(
+        UPDATE iffDetails
+        SET deletion = :frameIndex
+        WHERE indexNo = :indexNo
+    )");
+
     for (const auto &c : list) {
-        q.bindValue(":op",  c.operation);
-        q.bindValue(":idx", c.index);
-        q.bindValue(":fi",  frameIndex);
-        if (!q.exec()) { qCritical() << "insertIffCRUD:" << q.lastError(); return false; }
+        query.bindValue(":operation",  c.operation);
+        query.bindValue(":indexNo",    c.index);
+        query.bindValue(":frameIndex", frameIndex);
+
+        if (!query.exec()) {
+            qCritical() << "insertIffCRUD failed:" << query.lastError().text();
+            return false;
+        }
+
+        if (c.operation == DELETE) {
+            deleteMarkQuery.bindValue(":frameIndex", frameIndex);
+            deleteMarkQuery.bindValue(":indexNo",    c.index);
+            if (!deleteMarkQuery.exec()) {
+                qCritical() << "Mark iffDetails deletion failed:"
+                            << deleteMarkQuery.lastError().text();
+                return false;
+            }
+        }
     }
     return true;
 }
 
+
+
+
 // ─── IFF READ ────────────────────────────────────────────────────────────
+
+// void SQLite::setIffDetails(int frameIndex, IffList &list)
+// {
+//     QSqlQuery q(database());
+//     q.prepare(R"(
+//         SELECT indexNo, id, type, state FROM iffDetails
+//         WHERE creation <= :fi AND (deletion IS NULL OR deletion >= :fi)
+//     )");
+//     q.bindValue(":fi", frameIndex);
+//     if (!q.exec()) { qCritical() << "setIffDetails:" << q.lastError(); return; }
+//     while (q.next()) {
+//         IffData d;
+//         d.index = q.value(0).toInt();
+//         d.id    = q.value(1).toString();
+//         d.type  = q.value(2).toString();
+//         d.state = QJsonDocument::fromJson(q.value(3).toByteArray()).object();
+//         list.push_back(d);
+//     }
+// }
+
+
 
 void SQLite::setIffDetails(int frameIndex, IffList &list)
 {
     QSqlQuery q(database());
     q.prepare(R"(
-        SELECT indexNo, id, type, state FROM iffDetails
-        WHERE creation <= :fi AND (deletion IS NULL OR deletion >= :fi)
+        SELECT indexNo, id, type, state
+        FROM iffDetails
+        WHERE creation <= :fi
+          AND (deletion IS NULL OR deletion > :fi)
     )");
     q.bindValue(":fi", frameIndex);
-    if (!q.exec()) { qCritical() << "setIffDetails:" << q.lastError(); return; }
+    if (!q.exec()) {
+        qCritical() << "setIffDetails:" << q.lastError();
+        return;
+    }
     while (q.next()) {
         IffData d;
         d.index = q.value(0).toInt();
@@ -2119,6 +2189,7 @@ void SQLite::setIffDetails(int frameIndex, IffList &list)
         list.push_back(d);
     }
 }
+
 
 void SQLite::setIffCRUD(int frameIndex, IffCRUDList &list)
 {

@@ -165,7 +165,7 @@ public:
     float endTime = -1;         //!< End time for motion (negative = infinite)
     float time = 0;             //!< Current simulation time
     float currentSpeed = 0;     //!< Current speed (km/h)
-    float currentAltitude = 0;  //!< Current altitude (ft)
+    float currentAltitude = 0;  //!< Current altitude (Km)
 
     // =========================================================================
     // SECTION: 6-DoF Motion Variables (without Rigidbody)
@@ -250,9 +250,9 @@ public:
     void fromJson(const QJsonObject &obj) override;
     void SaveState();
     void RestoreState();
-
+    bool followF = false;
     void FollowTrajectory();        //!< Execute trajectory following
-    void FollowFormation();
+    bool FollowFormation();
     void TimeJump(int sec);
     // Formation turn tracking state
     float lastLeaderHeading = 0.0f;      //!< Leader's previous heading
@@ -267,6 +267,7 @@ public slots:
     void setMoveSpeed(float speed); //!< Sets desired movement speed
 
 private:
+    Platform* platform = nullptr;
     float speed = 0;        //!< Internal speed (km/s)
     float delta = 0;        //!< Last delta time
     double lastLat = 0;     //!< Previous latitude for distance calc

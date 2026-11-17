@@ -8,6 +8,10 @@ struct DynamicSpeedConstants{
     float minSpeed;
 };
 
+struct DynamicTarget{
+    QVector3D pos;
+};
+
 struct DynamicAltitudeConstants{
     float maxAlttiude;
     float minAltitude;

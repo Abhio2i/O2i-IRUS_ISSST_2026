@@ -36,9 +36,13 @@ public:
     void setSensorParameter(
         const PoseGeo& _sensorPoseGeo,
         float _horizontalCameraAngle,
-        const std::unordered_map<std::string,
-                                 std::pair<bool, CartesianCoord>>& _IRDetectionCoord,
-        float _maxRangeMeters = 50000.0f);
+        const std::unordered_map<std::string, std::pair<bool, CartesianCoord>>& _IRDetectionCoord,
+        float _maxRangeMeters = 50000.0f,
+        const std::unordered_map<std::string, Entity::Category>& IRDetectionCategory  = {},
+        const std::unordered_map<std::string, float>& _IRTargetTempC = {},
+        float backgroundTempC = 20.0f);
+
+    std::unordered_map<std::string, Entity::Category> IRDetectionCategory;
 
     /* ===================  GIMBAL / SLEW / ZOOM  =================== */
     void setCommandedLOS(float azimuthDeg, float elevationDeg);
@@ -50,6 +54,8 @@ public:
 
     float getZoom()             const { return zoomLevel; }
 
+    void resetLandOrigin();
+
 private:
     PoseGeo sensorPoseGeo;
     float horizontalCameraAngle = 0;
@@ -58,6 +64,9 @@ private:
 
     std::unordered_map<std::string,
                        std::pair<bool, CartesianCoord>> IRDetectionCoord;
+
+    std::unordered_map<std::string, float> IRTargetTempC;
+    float m_backgroundTempC = 20.0f;  // ΔT ke liye
 
 protected:
     void initializeGL() override;
@@ -89,6 +98,10 @@ private:
 
     float slewRateDegPerSec  = 60.0f;
     float zoomLevel          = 1.0f;
+
+    bool m_landOriginSet = false;
+    double m_landOriginLat = 0.0;
+    double m_landOriginLon = 0.0;
 
     QElapsedTimer frameClock;
     bool frameClockStarted = false;

@@ -9,7 +9,7 @@ ScenarioConfig::ScenarioConfig(QObject *parent)
     savedGUIFPS(60),
     savedSimulationFPS(60),
     savedPhysicsFPS(60),
-    savedImageSize("100px"),
+    savedImageSize("60px"),
     savedDatabaseEnabled(false),
     savedDatabasePath(QString())
 {
@@ -89,12 +89,7 @@ void ScenarioConfig::saveAppSettings(int fps, int guifps, int simfps, int physic
     // Force save to disk
     settings->sync();
 
-    qDebug() << "💾 All settings saved:";
-    qDebug() << "  Main FPS:" << fps;
-    qDebug() << "  GUI FPS:" << guifps;
-    qDebug() << "  Simulation FPS:" << simfps;
-    qDebug() << "  Physics FPS:" << physicsfps;
-    qDebug() << "  Image Size:" << imageSize;
+
 }
 
 // Load application settings
@@ -112,15 +107,9 @@ void ScenarioConfig::loadAppSettings()
     // Load Physics FPS with default value 60
     savedPhysicsFPS = settings->value("appSettings/physicsfps", 60).toInt();
 
-    // Load Image Size with default value "100px"
-    savedImageSize = settings->value("appSettings/imageSize", "100px").toString();
+    // Load Image Size with default value "60px"
+    savedImageSize = settings->value("appSettings/imageSize", "60px").toString();
 
-    qDebug() << "Application settings loaded:";
-    qDebug() << "  Main FPS:" << savedFPS;
-    qDebug() << "  GUI FPS:" << savedGUIFPS;
-    qDebug() << "  Simulation FPS:" << savedSimulationFPS;
-    qDebug() << "  Physics FPS:" << savedPhysicsFPS;
-    qDebug() << "  Image Size:" << savedImageSize;
 }
 
 // Get saved FPS
@@ -177,7 +166,7 @@ void ScenarioConfig::addToRecentProjects(const QString &filePath)
     lastOpenedProject = filePath;
     settings->setValue("lastOpenedProject", filePath);
 
-    qDebug() << "✅ Added to recent projects:" << filePath;
+    // qDebug() << "✅ Added to recent projects:" << filePath;
 }
 
 // Get recent projects list
@@ -190,7 +179,7 @@ QStringList ScenarioConfig::getRecentProjects() const
 void ScenarioConfig::clearRecentProjects()
 {
     settings->remove("recentProjects");
-    qDebug() << "Recent projects list cleared";
+    // qDebug() << "Recent projects list cleared";
 }
 
 // Optional: JSON methods (if needed)
@@ -209,26 +198,22 @@ void ScenarioConfig::saveTooltipFields(const QSet<QString>& fields)
     QStringList fieldList = fields.values();
     settings->setValue("tooltipSettings/selectedFields", fieldList);
     settings->sync();
-
-    qDebug() << "💾 Tooltip fields saved:" << fieldList;
+    // qDebug() << "💾 Tooltip fields saved:" << fieldList;
 }
 
 // Load tooltip field selections
 QSet<QString> ScenarioConfig::loadTooltipFields() const
 {
     QStringList fieldList = settings->value("tooltipSettings/selectedFields").toStringList();
-
     // Default fields if nothing saved
     if (fieldList.isEmpty()) {
         fieldList = QStringList{"Name", "Speed", "Altitude", "Latitude", "Longitude"};
     }
-
     QSet<QString> fields;
     for (const QString& field : fieldList) {
         fields.insert(field);
     }
-
-    qDebug() << "📖 Tooltip fields loaded:" << fieldList;
+    // qDebug() << "📖 Tooltip fields loaded:" << fieldList;
     return fields;
 }
 void ScenarioConfig::saveDatabaseSettings(bool enabled, const QString& path)
@@ -238,14 +223,12 @@ void ScenarioConfig::saveDatabaseSettings(bool enabled, const QString& path)
     savedDatabaseEnabled = enabled;
     savedDatabasePath    = path;
     settings->sync();
-
 }
 
 void ScenarioConfig::loadDatabaseSettings()
 {
     savedDatabaseEnabled = settings->value("databaseSettings/enabled", false).toBool();
     savedDatabasePath    = settings->value("databaseSettings/path",    QString()).toString();
-
 }
 
 bool ScenarioConfig::getSavedDatabaseEnabled() const

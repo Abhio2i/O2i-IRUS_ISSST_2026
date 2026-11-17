@@ -12,6 +12,7 @@
 #include "eoSensorLib/georelativeangle.h"
 #include "eoSensorLib/georelativeelevation.h"
 #include "EOIRSensorLib/IRSensorLib/irsensorlib.h"
+#include "core/Hierarchy/entity.h"
 // #include "eoSensorLib/payload.h"
 #define M_PI 3.14159265358979323846
 
@@ -27,6 +28,8 @@ public:
     explicit EOSensor(Hierarchy* h);
     std::unordered_map<std::string, Platform*> m_Platforms;
     std::unordered_map<std::string, Specialzone*> m_Specialzones;
+
+    std::unordered_map<std::string, Entity::Category> EODetectionCategory;
 
     Surrounding getSurrounding(float radius   = 10000.0,
                                float atmCoeff = 0.00001,  // %

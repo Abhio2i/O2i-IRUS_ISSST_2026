@@ -63,6 +63,7 @@ public:
     QLabel* getTimeLabel() const { return timeLabel; }
     SimulationState getSimulationState() const { return currentState; }
     QJsonObject getSnapshot() const { return m_initialSnapshot; }
+    QAction *statisticsAction = nullptr;
 
     // ── Public methods ────────────────────────────────────────────────────
     void onElapsedTime(float time);
@@ -102,6 +103,7 @@ signals:
     void timeChanged(float newTimeInSeconds);
     void simulationStateChanged(SimulationState state);
     void resetTriggered();
+    void statisticsTriggered();
 
 private slots:
     void onTimeLabelClicked();

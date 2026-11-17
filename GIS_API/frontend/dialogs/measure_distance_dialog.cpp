@@ -1,3 +1,4 @@
+
 #include "measure_distance_dialog.h"
 #include "backend/api/measure_api.h"
 
@@ -10,11 +11,111 @@
 #include <QAbstractItemView>
 #include <cmath>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+// ---------------------------------------------------------------------------
+// Distance calculation helpers
+// ---------------------------------------------------------------------------
+
+// Haversine fallback (Vincenty converge na kare to use hota hai)
+static double haversineMeters(const QPointF& a, const QPointF& b)
+{
+    const double R = 6371008.8;
+    const double lat1 = a.y() * M_PI / 180.0;
+    const double lat2 = b.y() * M_PI / 180.0;
+    const double dLat = lat2 - lat1;
+    const double dLon = (b.x() - a.x()) * M_PI / 180.0;
+    const double h = std::sin(dLat / 2) * std::sin(dLat / 2) +
+                     std::cos(lat1) * std::cos(lat2) *
+                         std::sin(dLon / 2) * std::sin(dLon / 2);
+    return 2.0 * R * std::asin(std::min(1.0, std::sqrt(h)));
+}
+
+// Cartesian (planar): points ko Web Mercator (EPSG:3857) meters mein convert
+// karke seedhi straight-line distance (Pythagoras).
+double ApiMeasureDistanceDialog::cartesianMeters(const QPointF& a, const QPointF& b)
+{
+    const double R = 6378137.0;
+    const double maxLat = 85.05112878;
+    auto toMercator = [&](const QPointF& p) {
+        double lat = std::max(-maxLat, std::min(maxLat, p.y()));
+        double x = R * p.x() * M_PI / 180.0;
+        double y = R * std::log(std::tan(M_PI / 4.0 + lat * M_PI / 360.0));
+        return QPointF(x, y);
+    };
+    const QPointF pa = toMercator(a);
+    const QPointF pb = toMercator(b);
+    return std::hypot(pb.x() - pa.x(), pb.y() - pa.y());
+}
+
+// Ellipsoidal (geodesic): WGS84 ellipsoid par Vincenty inverse formula.
+double ApiMeasureDistanceDialog::ellipsoidalMeters(const QPointF& p1, const QPointF& p2)
+{
+    if (p1 == p2)
+        return 0.0;
+
+    const double a = 6378137.0;
+    const double f = 1.0 / 298.257223563;
+    const double b = (1.0 - f) * a;
+
+    const double L = (p2.x() - p1.x()) * M_PI / 180.0;
+    const double U1 = std::atan((1.0 - f) * std::tan(p1.y() * M_PI / 180.0));
+    const double U2 = std::atan((1.0 - f) * std::tan(p2.y() * M_PI / 180.0));
+    const double sinU1 = std::sin(U1), cosU1 = std::cos(U1);
+    const double sinU2 = std::sin(U2), cosU2 = std::cos(U2);
+
+    double lambda = L, lambdaP = 0.0;
+    double sinSigma = 0, cosSigma = 0, sigma = 0;
+    double cos2Alpha = 0, cos2SigmaM = 0;
+    int iter = 0;
+    bool converged = false;
+
+    do {
+        const double sinL = std::sin(lambda), cosL = std::cos(lambda);
+        sinSigma = std::sqrt(std::pow(cosU2 * sinL, 2) +
+                             std::pow(cosU1 * sinU2 - sinU1 * cosU2 * cosL, 2));
+        if (sinSigma == 0.0)
+            return 0.0; // coincident points
+        cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosL;
+        sigma = std::atan2(sinSigma, cosSigma);
+        const double sinAlpha = cosU1 * cosU2 * sinL / sinSigma;
+        cos2Alpha = 1.0 - sinAlpha * sinAlpha;
+        cos2SigmaM = (cos2Alpha != 0.0) ? cosSigma - 2.0 * sinU1 * sinU2 / cos2Alpha : 0.0;
+        const double C = f / 16.0 * cos2Alpha * (4.0 + f * (4.0 - 3.0 * cos2Alpha));
+        lambdaP = lambda;
+        lambda = L + (1.0 - C) * f * sinAlpha *
+                         (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma *
+                                                                   (-1.0 + 2.0 * cos2SigmaM * cos2SigmaM)));
+        if (std::fabs(lambda - lambdaP) < 1e-12) {
+            converged = true;
+            break;
+        }
+    } while (++iter < 200);
+
+    if (!converged)
+        return haversineMeters(p1, p2); // nearly antipodal points
+
+    const double uSq = cos2Alpha * (a * a - b * b) / (b * b);
+    const double A = 1.0 + uSq / 16384.0 * (4096.0 + uSq * (-768.0 + uSq * (320.0 - 175.0 * uSq)));
+    const double B = uSq / 1024.0 * (256.0 + uSq * (-128.0 + uSq * (74.0 - 47.0 * uSq)));
+    const double dSigma = B * sinSigma * (cos2SigmaM + B / 4.0 *
+                                                           (cosSigma * (-1.0 + 2.0 * cos2SigmaM * cos2SigmaM) -
+                                                            B / 6.0 * cos2SigmaM * (-3.0 + 4.0 * sinSigma * sinSigma) *
+                                                                (-3.0 + 4.0 * cos2SigmaM * cos2SigmaM)));
+    return b * A * (sigma - dSigma);
+}
+
+// ---------------------------------------------------------------------------
+// Dialog
+// ---------------------------------------------------------------------------
+
 ApiMeasureDistanceDialog::ApiMeasureDistanceDialog(QWidget* parent)
     : QDialog(parent)
 {
     setWindowTitle(tr("Measure Distance"));
-    setMinimumSize(420, 320);
+    setMinimumSize(420, 360);
     setWindowFlags(Qt::Window |
                    Qt::WindowTitleHint |
                    Qt::WindowSystemMenuHint |
@@ -26,6 +127,7 @@ ApiMeasureDistanceDialog::ApiMeasureDistanceDialog(QWidget* parent)
 }
 
 ApiMeasureDistanceDialog::~ApiMeasureDistanceDialog() {}
+
 void ApiMeasureDistanceDialog::setupUi()
 {
     setStyleSheet(
@@ -67,6 +169,18 @@ void ApiMeasureDistanceDialog::setupUi()
         "  background-color: #16213e; color: white; selection-background-color: #0078d7;"
         "}"
         "QLabel { color: #e0e0e0; font-size: 13px; }"
+        "QRadioButton { color: #e0e0e0; font-size: 13px; spacing: 8px; }"
+        "QRadioButton::indicator {"
+        "  width: 12px; height: 12px;"
+        "  border: 2px solid white; border-radius: 8px;"
+        "  background-color: transparent;"
+        "}"
+        "QRadioButton::indicator:hover { border-color: #5aa9ff; }"
+        "QRadioButton::indicator:checked {"
+        "  border: 2px solid white;"
+        "  background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,"
+        "    stop:0 #0078d7, stop:0.55 #0078d7, stop:0.6 transparent, stop:1 transparent);"
+        "}"
         "QPushButton {"
         "  background-color: #0f3460; color: white; padding: 8px 18px;"
         "  border: none; border-radius: 4px; font-size: 13px; min-width: 80px;"
@@ -79,6 +193,7 @@ void ApiMeasureDistanceDialog::setupUi()
     main->setContentsMargins(12, 12, 12, 12);
     main->setSpacing(10);
 
+    // --- Table ---
     m_table = new QTableWidget(this);
     m_table->setColumnCount(3);
     m_table->setHorizontalHeaderLabels({tr("x"), tr("y"), tr("Distance")});
@@ -92,10 +207,38 @@ void ApiMeasureDistanceDialog::setupUi()
     m_table->setShowGrid(true);
     main->addWidget(m_table, 1);
 
+    // --- Method row: Cartesian / Ellipsoidal ---
+    QHBoxLayout* methodRow = new QHBoxLayout();
+    methodRow->setSpacing(16);
+    m_cartesianRadio = new QRadioButton(tr("Cartesian"), this);
+    m_ellipsoidalRadio = new QRadioButton(tr("Ellipsoidal"), this);
+
+    // Initial state MeasureApi se lo, taaki radio aur actual method hamesha sync rahein
+    m_method = (MeasureApi::instance()->distanceMethod() == MeasureApi::DistanceMethod::Ellipsoidal)
+                   ? Method::Ellipsoidal : Method::Cartesian;
+    m_cartesianRadio->setChecked(m_method == Method::Cartesian);
+    m_ellipsoidalRadio->setChecked(m_method == Method::Ellipsoidal);
+
+    m_methodGroup = new QButtonGroup(this);
+    m_methodGroup->addButton(m_cartesianRadio);
+    m_methodGroup->addButton(m_ellipsoidalRadio);
+
+    // Group mein ek select hone par doosra unselect hota hai, isliye
+    // sirf ek radio ka toggled connect karna kaafi hai (signal ek hi baar aata hai).
+    connect(m_cartesianRadio, &QRadioButton::toggled,
+            this, &ApiMeasureDistanceDialog::onMethodChanged);
+
+    methodRow->addWidget(m_cartesianRadio);
+    methodRow->addWidget(m_ellipsoidalRadio);
+    methodRow->addStretch();
+    main->addLayout(methodRow);
+
+    // --- Unit + Total row ---
     QHBoxLayout* bottom = new QHBoxLayout();
     bottom->setSpacing(10);
     m_unitCombo = new QComboBox(this);
-    m_unitCombo->addItems({tr("meters"), tr("kilometers"), tr("feet"), tr("miles"), tr("nautical miles"), tr("degrees")});
+    m_unitCombo->addItems({tr("meters"), tr("kilometers"), tr("feet"),
+                           tr("miles"), tr("nautical miles"), tr("degrees")});
     connect(m_unitCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ApiMeasureDistanceDialog::onUnitChanged);
     bottom->addWidget(m_unitCombo);
@@ -106,6 +249,8 @@ void ApiMeasureDistanceDialog::setupUi()
         " border-radius: 4px; padding: 8px 14px; font-weight: bold; }");
     bottom->addWidget(m_totalLabel);
     main->addLayout(bottom);
+
+    // --- Buttons ---
     QHBoxLayout* buttons = new QHBoxLayout();
     buttons->setSpacing(10);
     buttons->addStretch();
@@ -119,14 +264,21 @@ void ApiMeasureDistanceDialog::setupUi()
     buttons->addWidget(m_copyBtn);
     buttons->addWidget(m_closeBtn);
     main->addLayout(buttons);
-
 }
 
 void ApiMeasureDistanceDialog::setPoints(const QVector<QPointF>& geoPoints,
                                          const QVector<double>& segmentMeters)
 {
     m_points = geoPoints;
-    m_segmentMeters = segmentMeters;
+    if (segmentMeters.size() == geoPoints.size() && !segmentMeters.isEmpty()) {
+        // Bahar (map / MeasureApi) se aayi values use karo, taaki map aur table same rahein
+        m_segmentMeters = segmentMeters;
+        m_externalSegments = true;
+    } else {
+        // Koi segments nahi diye gaye: dialog khud calculate karega
+        m_externalSegments = false;
+        recalculateSegments();
+    }
     rebuildTable();
 }
 
@@ -137,24 +289,36 @@ void ApiMeasureDistanceDialog::clearMeasurement()
     rebuildTable();
 }
 
+void ApiMeasureDistanceDialog::recalculateSegments()
+{
+    m_segmentMeters.clear();
+    m_segmentMeters.reserve(m_points.size());
+    for (int i = 0; i < m_points.size(); ++i) {
+        if (i == 0) {
+            m_segmentMeters << 0.0;
+            continue;
+        }
+        const double d = (m_method == Method::Ellipsoidal)
+                             ? ellipsoidalMeters(m_points[i - 1], m_points[i])
+                             : cartesianMeters(m_points[i - 1], m_points[i]);
+        m_segmentMeters << d;
+    }
+}
+
 void ApiMeasureDistanceDialog::rebuildTable()
 {
     m_table->setRowCount(0);
     double totalMeters = 0.0;
     for (double d : m_segmentMeters)
         totalMeters += d;
+
     for (int i = 0; i < m_points.size(); ++i) {
         m_table->insertRow(i);
         const QPointF& p = m_points[i];
         QTableWidgetItem* xItem = new QTableWidgetItem(QString::number(p.x(), 'f', 6));
         QTableWidgetItem* yItem = new QTableWidgetItem(QString::number(p.y(), 'f', 6));
-        double segM = (i < m_segmentMeters.size()) ? m_segmentMeters[i] : 0.0;
-        QString distText;
-        if (i == 0) {
-            distText = QString::number(convertFromMeters(0.0), 'f', 3);
-        } else {
-            distText = QString::number(convertFromMeters(segM), 'f', 3);
-        }
+        const double segM = (i < m_segmentMeters.size()) ? m_segmentMeters[i] : 0.0;
+        const QString distText = QString::number(convertFromMeters(i == 0 ? 0.0 : segM), 'f', 3);
         QTableWidgetItem* dItem = new QTableWidgetItem(distText);
         xItem->setTextAlignment(Qt::AlignCenter);
         yItem->setTextAlignment(Qt::AlignCenter);
@@ -207,6 +371,27 @@ void ApiMeasureDistanceDialog::onUnitChanged(int index)
     rebuildTable();
 }
 
+void ApiMeasureDistanceDialog::onMethodChanged()
+{
+    m_method = m_ellipsoidalRadio->isChecked() ? Method::Ellipsoidal
+                                               : Method::Cartesian;
+    // MeasureApi ko batao: ab segments (aur map labels) isi method se banenge
+    MeasureApi::instance()->setDistanceMethod(
+        m_method == Method::Ellipsoidal ? MeasureApi::DistanceMethod::Ellipsoidal
+                                        : MeasureApi::DistanceMethod::Cartesian);
+
+    if (m_externalSegments) {
+        // MeasureApi se naye segments lekar table refresh karo
+        const QVector<double> segs = MeasureApi::instance()->getSegmentMeters();
+        if (segs.size() == m_points.size())
+            m_segmentMeters = segs;
+    } else {
+        recalculateSegments();
+    }
+    rebuildTable();
+    emit methodChanged(m_method);
+}
+
 void ApiMeasureDistanceDialog::onNew()
 {
     clearMeasurement();
@@ -216,6 +401,8 @@ void ApiMeasureDistanceDialog::onNew()
 void ApiMeasureDistanceDialog::onCopy()
 {
     QString text;
+    text += QStringLiteral("Method\t%1\n")
+                .arg(m_method == Method::Ellipsoidal ? "Ellipsoidal" : "Cartesian");
     text += "x\ty\tDistance\n";
     for (int r = 0; r < m_table->rowCount(); ++r) {
         QStringList cols;
@@ -225,9 +412,8 @@ void ApiMeasureDistanceDialog::onCopy()
         }
         text += cols.join('\t') + "\n";
     }
-    text += QString("Total\t\t%1 %2\n")
-                .arg(m_totalLabel->text())
-                .arg(unitSuffix());
+    // m_totalLabel mein pehle se "Total: X unit" likha hai, isliye suffix dobara nahi jodna
+    text += QString("\t\t%1\n").arg(m_totalLabel->text());
     QApplication::clipboard()->setText(text);
 }
 

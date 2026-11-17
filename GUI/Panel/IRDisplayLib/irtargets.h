@@ -1,6 +1,8 @@
 #ifndef IRTARGETS_H
 #define IRTARGETS_H
 
+#include "core/Hierarchy/entity.h"
+
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLBuffer>
@@ -32,7 +34,7 @@ public:
     void render(const QMatrix4x4 &projection, const QMatrix4x4 &cameraMatrix,
                 float tx, float ty, float tz,
                 const QQuaternion &rotation,
-                const QString &modelPath, const QString &texturePath);
+                const QString &modelPath, const QString &texturePath, Entity::Category category = Entity::Category::Air);
 
 private:
     void initShaders();
@@ -55,8 +57,18 @@ private:
     QOpenGLShaderProgram program;
 
     // Fallback defaults
-    QString defaultModel3d = ":/model/airplane/Model/Airplane/11803_Airplane_v1_l1.obj";
-    QString defaultTexture = ":/model/airplane/Model/Airplane/11803_Airplane_body_diff.jpg";
+    // QString defaultModel3d = ":/model/airplane/Model/Airplane/11803_Airplane_v1_l1.obj";
+    // QString defaultTexture = ":/model/airplane/Model/Airplane/11803_Airplane_body_diff.jpg";
+
+    QString defaultModel3d = ":/model/airplane/Model/Airplane/F-15_Eagle.obj";
+    QString defaultTexture = ":/model/airplane/Model/Airplane/F_15H.jpg";
+
+
+    QString defaultGroundModel3d = ":/model/airplane/Model/Airplane/tankk.obj";
+    QString defaultGroundTexture = ":/model/airplane/Model/Airplane/texture_pbr_20250901.jpg";
+
+    QString defaultMarineModel3d = ":/model/airplane/Model/Airplane/ins-visakhapatnam.obj";
+    QString defaultMarineTexture = ":/model/airplane/Model/Airplane/ins-visakhapatnam.jpg";
 };
 
 #endif // IRTARGETS_H

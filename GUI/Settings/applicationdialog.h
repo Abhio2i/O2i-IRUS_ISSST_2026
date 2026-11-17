@@ -9,7 +9,8 @@
  * DESCRIPTION:  Declares the ApplicationDialog class which provides a modal
  *               dialog for configuring application‑wide settings and parameters.
  *               Includes tabs for General (FPS limits, developer mode, image size),
- *               Database (enable/disable, path selection), and Physics (FPS).
+ *               Appearance (theme selection with live preview), Database
+ *               (enable/disable, path selection), and Physics (FPS).
  *               Settings are stored globally as static members and can be accessed
  *               from anywhere in the application. Supports validation of user
  *               input, signal emission on setting changes, and persistent storage
@@ -50,6 +51,8 @@
 #include <QGroupBox>
 #include <QCheckBox>
 #include <QTabWidget>
+#include <QButtonGroup>
+#include <QString>
 
 class ApplicationDialog : public QDialog
 {
@@ -66,6 +69,8 @@ public:
     int getPhysicsFPS() const;
     QString getImageSize() const;
     bool getDeveloperMode() const;
+    bool getsharedmemoryMode() const;
+
 
     // %%% Global Static Accessors %%%
     static int getGlobalFPS();
@@ -90,8 +95,16 @@ public:
     static void resetGlobalSettings();
     static bool getGlobalDeveloperMode();
     static void setGlobalDeveloperMode(bool enabled);
+    static bool getGlobalSharedMode();
+    static void setGlobalSharedMode(bool enabled);
     static void loadSelectedDatabase();
     // static void runUnitTestsOnce();
+    static bool getGlobalEntityZoomScale();
+    static void setGlobalEntityZoomScale(bool enabled);
+    bool needsRestart() const { return m_restartNeeded; }
+
+public slots:
+    void reject() override;
 
 signals:
     void fpsState(int value);
@@ -100,7 +113,10 @@ signals:
     void physicsFPSState(int value);
     void canvasIconState(int value);
     void developerModeState(bool enabled);
+    void sharedModeState(bool enabled);
+
     void databaseSettingsChanged(bool enabled, const QString& path);
+    void entityZoomScaleState(bool enabled);
 
 private slots:
     void onOkClicked();
@@ -118,6 +134,7 @@ private:
 
     // %%% Tab builders ─────────────────────────────────────
     QWidget* buildGeneralTab();
+    QWidget* buildAppearanceTab();
     QWidget* buildDatabaseTab();
     QWidget* buildPhysicsTab();
 
@@ -128,6 +145,8 @@ private:
     // %%% UI Components — General tab %%%
     QGroupBox  *settingsGroup;
     QCheckBox  *developerModeCheckBox;
+    QCheckBox  *sharedModeCheckBox;
+
     QLineEdit  *fpsEdit;
     QLineEdit  *guiFPSEdit;
     QLineEdit  *simulationFPSEdit;
@@ -155,6 +174,7 @@ private:
 
     // %%% Static members %%%
     static bool    s_developerMode;
+    static bool    s_sharedMode;
     static bool    s_initialized;
     static bool    s_databaseEnabled;
     static QString s_databasePath;
@@ -164,6 +184,34 @@ private:
     QIntValidator *guiFPSValidator;
     QIntValidator *simulationFPSValidator;
     QIntValidator *physicsFPSValidator;
+
+    QCheckBox *entityZoomScaleCheckBox = nullptr;
+    static bool s_entityZoomScale;
+
+    // %%% Appearance / Theme %%%
+    QButtonGroup *themeButtonGroup   = nullptr;
+    QString       m_initialThemeId;
+    bool          m_themeCommitted   = false;
+
+    struct SettingsSnapshot {
+        int     fps = 0, guiFps = 0, simFps = 0, physFps = 0;
+        QString imageSize;
+        bool    devMode = false;
+        bool    zoomScale = false;
+        bool    dbEnabled = false;
+        QString dbPath;
+        bool operator==(const SettingsSnapshot& o) const {
+            return fps == o.fps && guiFps == o.guiFps && simFps == o.simFps
+                   && physFps == o.physFps && imageSize == o.imageSize
+                   && devMode == o.devMode && zoomScale == o.zoomScale
+                   && dbEnabled == o.dbEnabled && dbPath == o.dbPath;
+        }
+    };
+    SettingsSnapshot m_initialSnapshot;
+    SettingsSnapshot currentSnapshot() const;
+    bool m_dbChangedInDialog = false;
+    bool m_restartNeeded     = false;
+    QString m_pendingThemeId;
 };
 
 #endif // APPLICATIONDIALOG_H

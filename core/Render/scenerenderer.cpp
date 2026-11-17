@@ -56,10 +56,10 @@ void SceneRenderer::entityAdded(QString /*parentID*/, Entity* entity) {
         meshData.name = QString::fromStdString(weapon->Name);
         meshData.transform = &weapon->transform;
         meshData.collider = &weapon->collider;
-        meshData.trajectory = &weapon->trajectory;
+        // meshData.trajectory = &weapon->trajectory;
         meshData.Meshes = weapon->meshRenderer2d.Meshes;
         meshData.entity = entity;
-        meshData.dynamicmodel = &weapon->dynamicModel;
+        // meshData.dynamicmodel = &weapon->dynamicModel;
         emit addMesh(QString::fromStdString(weapon->ID), meshData);
     }
     Specialzone* zone = dynamic_cast<Specialzone*>(entity);

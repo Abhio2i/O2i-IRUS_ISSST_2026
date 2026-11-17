@@ -51,6 +51,7 @@ void CrossSection::Start(){}
  * @param type Identifier for the section type (e.g., "Radar", "Visual").
  * @return QJsonObject representing the section.
  */
+
 QJsonObject toSection(const CrossSection::data& d, const QString& type) {
     QJsonObject section;
     section["type"] = "Section";

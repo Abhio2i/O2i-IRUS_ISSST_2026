@@ -90,7 +90,7 @@ void WeaponProfile::addSubComponent(std::string name,
         }
         weapon = m;
     }else
-        if (data1 == "SunoBuoy") {
+        if (data1 == "Sonobuoy") {
             Sonobuoy* m = new Sonobuoy(parent);
             if (!data2.isEmpty()) {
                 auto it = parent->Weapons.find(data2.toStdString());
@@ -184,6 +184,7 @@ void WeaponProfile::addSubComponent(std::string name,
     weapon->Name         = name;
     weapon->parentID     = parentID;
 
+    weapon->addSupportedcomponent();
     weapons->insert({weapon->ID, weapon});
     parent->Weapons.insert({weapon->ID, weapon});
 
@@ -206,12 +207,12 @@ void WeaponProfile::emitAutoComponentSignals(Hierarchy* parent, Weapon* weapon)
     QString wID = QString::fromStdString(weapon->ID);
     struct { const char* name; std::string id; } comps[] = {
                  { "transform",    weapon->transform.ID      },
-                 { "rigidbody",    weapon->rigidbody.ID      },
+                 // { "rigidbody",    weapon->rigidbody.ID      },
                  { "collider",     weapon->collider.ID       },
-                 { "trajectory",   weapon->trajectory.ID     },
+                 // { "trajectory",   weapon->trajectory.ID     },
                  { "bitmap",       weapon->meshRenderer2d.ID },
-                 { "dynamicModel", weapon->dynamicModel.ID   },
-                 { "crossSection", weapon->crossSection.ID   },
+                 // { "dynamicModel", weapon->dynamicModel.ID   },
+                 // { "crossSection", weapon->crossSection.ID   },
                  };
     for (const auto& c : comps)
         if (!c.id.empty())
@@ -234,6 +235,7 @@ void WeaponProfile::removeSubComponent(std::string ID)
                                          QString::fromStdString(weapon->Name));
         weapons->erase(weapon->ID);
         parent->Weapons.erase(weapon->ID);
+        parent->Entities.erase(weapon->ID);
         delete weapon;
     }
 }
@@ -299,7 +301,11 @@ void WeaponProfile::fromJson(const QJsonObject& obj)
     for (const QString& key : weaponsObj.keys()) {
         if(!parent)break;
         QJsonObject weaponObj = weaponsObj[key].toObject();
-        QString     type      = weaponObj.value("weaponTypeName").toString();
+        QString     type      = weaponObj.value("weaponType").toString();
+        if(type.isEmpty()){
+            QJsonObject WeaponTypeObj = weaponObj["weaponType"].toObject();
+            type = WeaponTypeObj["value"].toString();
+        }
         std::string id        = weaponObj["id"].toString().toStdString();
 
         Weapon* weapon  = nullptr;
@@ -309,7 +315,7 @@ void WeaponProfile::fromJson(const QJsonObject& obj)
             weapon = (*weapons)[id];
         } else if (type == "Missile") {
             weapon = new Missile(parent);
-        } else if (type == "Sunobuoy") {
+        } else if (type == "Sonobuoy") {
             weapon = new Sonobuoy(parent);
         } else if (type == "Bomb") {
             weapon = new Bomb(parent);
@@ -333,8 +339,9 @@ void WeaponProfile::fromJson(const QJsonObject& obj)
         //weapon->ID           = weaponObj["id"].toString().toStdString();
         weapon->parentEntity = parentEntity;
         weapon->parentID = parentEntity->ID;
-        weapon->init();
+        // weapon->init();
         std::string newId = weapon->ID;
+        weapon->addSupportedcomponent();
         weapon->fromJson(weaponObj);
         weapon->ID = newId;
 

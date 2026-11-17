@@ -221,9 +221,34 @@ Entity* ProfileCategaory::addEntity(std::string entityName, std::string iD, QStr
                         if(type == Constants::EntityType::IFF){
                             entity = new IFF(parent);
                         }else
-                            if(type == Constants::EntityType::Weapon){
-                                entity = new Weapon(parent);
-                            }else{
+                        if(type == Constants::EntityType::Weapon){
+                            if(data1 == "Missile"){
+                                entity = new Missile(parent);
+                            }else
+                                if(data1 == "Sonobuoy"){
+                                    entity = new Sonobuoy(parent);
+                                }else
+                                    if(data1 == "Bomb"){
+                                        entity = new Bomb(parent);
+                                    }else
+                                        if(data1 == "Torpedo"){
+                                            entity = new Torpedo(parent);
+                                        }else
+                                            if(data1 == "Artillery"){
+                                                entity = new Artillery(parent);
+                                            }else
+                                                if(data1 == "Rocket"){
+                                                    entity = new Rocket(parent);
+                                                }else
+                                                    if(data1 == "Flare"){
+                                                        entity = new Flare(parent);
+                                                    }else
+                                                        if(data1 == "Chaff"){
+                                                            entity = new Chaff(parent);
+                                                        }else{
+                                                            entity = new Sonobuoy(parent);
+                                                        }
+                        }else{
                                 entity = new Platform(parent);
                             }
     entity->Name = entityName;
@@ -260,37 +285,6 @@ Entity* ProfileCategaory::addEntity(std::string entityName, std::string iD, QStr
                                     parent->Platforms.insert({entity->ID, dynamic_cast<Platform*>(entity)});
                                 }
         entity->spawn();
-
-        // For Weapon entities: the constructor auto-creates all 7 components,
-        // but the tree won't show them unless we emit componentAdded for each one.
-        // (Platform components are already emitted inside addComponent() itself;
-        //  Weapon uses the same addComponent() path so its signals fire too,
-        //  but only when a Hierarchy parent is available at construction time.
-        //  Emitting here guarantees the tree is always in sync.)
-        if (type == Constants::EntityType::Weapon) {
-            Weapon* weapon = dynamic_cast<Weapon*>(entity);
-            if (weapon) {
-                QString wID = QString::fromStdString(weapon->ID);
-                struct { const char* name; std::string id; } comps[] = {
-                             { "transform",    /*weapon->transform      ?*/ weapon->transform.ID      /*: "" */},
-                             { "rigidbody",    /*weapon->rigidbody      ?*/ weapon->rigidbody.ID      /*: ""*/ },
-                             { "collider",     /*weapon->collider       ?*/ weapon->collider.ID       /*: "" */},
-                             { "trajectory",   /*weapon->trajectory     ?*/ weapon->trajectory.ID     /*: "" */},
-                             { "bitmap",       /*weapon->meshRenderer2d ?*/ weapon->meshRenderer2d.ID /*: "" */},
-                             { "dynamicModel", /*weapon->dynamicModel   ?*/ weapon->dynamicModel.ID   /*: "" */},
-                             { "crossSection", /*weapon->crossSection   ?*/ weapon->crossSection.ID   /*: "" */},
-                             };
-                for (const auto& c : comps) {
-                    if (!c.id.empty()) {
-                        emit parent->componentAdded(
-                            wID,
-                            QString::fromStdString(c.id),
-                            QString::fromLatin1(c.name));
-                    }
-                }
-            }
-        }
-
         parent->dictionry[entity->parentID].push_back(entity->ID);
     } else {
         Console::error(
@@ -342,32 +336,6 @@ void ProfileCategaory::addEntityWithObject(Entity *entity){
                                     parent->Platforms.insert({entity->ID, dynamic_cast<Platform*>(entity)});
                                 }
         entity->spawn();
-
-        if (type == Constants::EntityType::Weapon) {
-            Weapon* weapon = dynamic_cast<Weapon*>(entity);
-            if (weapon) {
-                QString wID = QString::fromStdString(weapon->ID);
-                struct { const char* name; std::string id; } comps[] = {
-                             { "transform",    /*weapon->transform      ? */weapon->transform.ID      /*: "" */},
-                             { "rigidbody",    /*weapon->rigidbody      ? */weapon->rigidbody.ID      /*: "" */},
-                             { "collider",     /*weapon->collider       ? */weapon->collider.ID       /*: "" */},
-                             { "trajectory",   /*weapon->trajectory     ? */weapon->trajectory.ID     /*: "" */},
-                             { "bitmap",       /*weapon->meshRenderer2d ? */weapon->meshRenderer2d.ID /*: "" */},
-                             { "dynamicModel", /*weapon->dynamicModel   ? */weapon->dynamicModel.ID   /*: "" */},
-                             { "crossSection", /*weapon->crossSection   ? */weapon->crossSection.ID   /*: "" */},
-                             };
-                weapon->init();
-                // for (const auto& c : comps) {
-                //     if (!c.id.empty()) {
-                //         emit parent->componentAdded(
-                //             wID,
-                //             QString::fromStdString(c.id),
-                //             QString::fromLatin1(c.name));
-                //     }
-                // }
-            }
-        }
-
         parent->dictionry[entity->parentID].push_back(entity->ID);
     } else {
         Console::error(
@@ -557,11 +525,15 @@ void ProfileCategaory::fromJson(const QJsonObject& obj)
                                 }else
                                     if(type == Constants::EntityType::Weapon){
                                         // entity = new Weapon(parent);
-                                        QString typeName = entityJson["weaponTypeName"].toString();
+                                        QString typeName = entityJson["weaponType"].toString();
+                                        if(typeName.isEmpty()){
+                                            QJsonObject WeaponTypeObj = entityJson["weaponType"].toObject();
+                                            typeName = WeaponTypeObj["value"].toString();
+                                        }
                                         if (typeName == "Bomb")
                                             entity = new Bomb(parent);
                                         else
-                                        if (typeName == "Sunobuoy")
+                                        if (typeName == "Sonobuoy")
                                             entity = new Sonobuoy(parent);
                                         else
                                         if (typeName == "Torpedo")
@@ -586,6 +558,16 @@ void ProfileCategaory::fromJson(const QJsonObject& obj)
             entity->Name = entityJson["name"].toString().toStdString();
             entity->ID = entityJson["id"].toString().toStdString();
             if (entity) {
+                if (entityJson.contains("Category") && entityJson["Category"].isObject()) {
+                    QJsonObject CategoryObj = entityJson["Category"].toObject();
+                    if (CategoryObj.contains("value")){
+                        for (int i = 0; i < 3 ; i++) {
+                            if (entity->CategoryNames[i] == CategoryObj["value"].toString().toStdString()) {
+                                entity->category = (Entity::Category)i;
+                            }
+                        }
+                    }
+                }
                 addEntityWithObject(entity);
                 entity->addSupportedcomponent();
                 entity->fromJson(entityJson);

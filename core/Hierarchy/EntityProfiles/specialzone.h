@@ -85,6 +85,7 @@ public:
     // DESCRIPTION: Mandatory methods for entity lifecycle and component systems.
     // =========================================================================
     void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
     std::vector<std::string> getSupportedComponents() override;
     void addSupportedcomponent() override;
     void addComponent(std::string name) override;

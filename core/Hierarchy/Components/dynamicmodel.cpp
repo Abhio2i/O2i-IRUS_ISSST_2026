@@ -269,7 +269,7 @@ DynamicModel::DynamicModel():Component() {
     parentEntity->root->world.AddComponent<ECS::DynamicVariables>(parentEntity->ecsID);
     parentEntity->root->world.AddComponent<ECS::DynamicVelocity>(parentEntity->ecsID);
     parentEntity->root->world.AddComponent<ECS::DynamicOrientation>(parentEntity->ecsID);
-    // parentEntity->root->world.AddComponent<ECS::DynamicTarget>(parentEntity->ecsID);
+    parentEntity->root->world.AddComponent<ECS::DynamicTarget>(parentEntity->ecsID);
 }
 
 DynamicModel::~DynamicModel(){
@@ -289,6 +289,7 @@ void DynamicModel::Start(){}
  */
 void DynamicModel::init(Entity *Entity){
     parentEntity = Entity;
+    platform = dynamic_cast<Platform*>(parentEntity);
     if(startTime<Simulation::simulationTime){
         startTime = Simulation::simulationTime;
     }
@@ -344,7 +345,7 @@ void DynamicModel::Update(float deltaTime) {
 }
 
 
-void DynamicModel::FollowFormation(){
+bool DynamicModel::FollowFormation(){
     const float rotationSmoothFactor = 5.0f;
     const float G_ACCELERATION_VAL = 9.81f;
     const float dampingFactor = 0.90f;
@@ -357,7 +358,7 @@ void DynamicModel::FollowFormation(){
         if (/*mTransform &&*/ /*mModel &&*/ mPlatform->trajectory.getTargetWaypoint()&&mPlatform->trajectory.getTargetWaypoint()->formation) {
 
 
-            if(mModel.currentSpeed<10)return;
+            if(mModel.currentSpeed<10)return false;
             // --- 2. TURN DETECTION & COMMITMENT SYSTEM ---
             float leaderHeading = mTransform.matrix.rotation().toEulerAngles().y();
             float myHeading = transform->matrix.rotation().toEulerAngles().y();
@@ -562,10 +563,12 @@ void DynamicModel::FollowFormation(){
                 QQuaternion smoothedRot = QQuaternion::slerp(currentRotation, mModel.transform->rotation(), delta);
                 transform->setRotation(smoothedRot);
             }
-            return;
+            return true;
         }
-    }
 
+
+    }
+ return false;
 }
 
 /**
@@ -579,9 +582,9 @@ void DynamicModel::FollowTrajectory() {
     //============================================================================
     // --- 1. Physics & Damping Constants ---
 
-    FollowFormation();
+    followF =FollowFormation();
 
-    if(followTarget){
+    if(followF){
         return;
     }
 
@@ -647,6 +650,17 @@ void DynamicModel::FollowTrajectory() {
                 Altitude = 0;
                 return;
             }
+
+            if(trajectory->rule == Trajectory::FollowRule::Disappear&& trajectory->current >= trajectory->Trajectories.size()){
+                endTime = time;
+                if(platform){
+                    platform->setActive(false);
+                }
+                moveSpeed = 0;
+                Altitude = 0;
+                return;
+            }
+
             if(trajectory->rule == Trajectory::FollowRule::Reverse && trajectory->current >= trajectory->Trajectories.size()){
                 trajectory->reverse = true;
                 trajectory->current = trajectory->current-1;
@@ -708,7 +722,7 @@ void DynamicModel::FollowTrajectory() {
     // if(!tp){
     //     tp = &parentEntity->root->world.AddComponent<ECS::DynamicTarget>(parentEntity->ecsID);
     // }
-    // tp->pos = last3d;
+
     ProjectionResult r =
         projectAircraftOnPath(
             last3d,
@@ -716,6 +730,9 @@ void DynamicModel::FollowTrajectory() {
             QVector3D(targt.x,targt.y,targt.z),
             2
             );
+    if(trajectory->current == 0){
+        r.offsetPoint = QVector3D(targt.x,targt.y,targt.z);
+    }
     // tp->pos = r.offsetPoint;
     heading = getGlobalHeading(last3d,r.offsetPoint);
 
@@ -1064,16 +1081,16 @@ QJsonObject DynamicModel::toJson() const {
     timeObj["value"] = toParm(startTime,"s");
     obj["takeoff"] = timeObj;
 
-    if(parentEntity && parentEntity->root){
-        QJsonObject dynamicTypeObj;
-        dynamicTypeObj["type"] = "option";
-        QJsonArray optionsArray;
-        for (const QString& opt : parentEntity->root->getAvailableDynamicTypes())
-            optionsArray.append(opt);
-        dynamicTypeObj["options"] = optionsArray;
-        dynamicTypeObj["value"] = dynamicType;
-        obj["dynamicType"] = dynamicTypeObj;
-    }
+    // if(parentEntity && parentEntity->root){
+    //     QJsonObject dynamicTypeObj;
+    //     dynamicTypeObj["type"] = "option";
+    //     QJsonArray optionsArray;
+    //     for (const QString& opt : parentEntity->root->getAvailableDynamicTypes())
+    //         optionsArray.append(opt);
+    //     dynamicTypeObj["options"] = optionsArray;
+    //     dynamicTypeObj["value"] = dynamicType;
+    //     obj["dynamicType"] = dynamicTypeObj;
+    // }
 
     // ---------------------------------------------------------------------
     // MAXIMUMS / BASIC MOTION

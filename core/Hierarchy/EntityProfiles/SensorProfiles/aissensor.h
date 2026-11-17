@@ -62,6 +62,7 @@ struct AISVesselData {
     int8_t rot;                   // Rate of Turn (deg/min)
 
     NavStatus nav_status;
+    bool positionAccuracy;
 
     // --- Voyage Related ---
     struct ETA {
@@ -92,7 +93,7 @@ public:
     static rf::RfPropagationModel* model;
     QVector<AisRxEvent> rxEvents;
     float lastPrintTime = 0.0f;
-     QVector<AISVesselData> detect;
+    QVector<AISVesselData> detect;
     // float frequency = 8;//ghz
     // float azimuth = 60;//deg
     // float range = 100;//km

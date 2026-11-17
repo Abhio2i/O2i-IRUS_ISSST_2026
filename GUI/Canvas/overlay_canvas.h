@@ -57,8 +57,6 @@ private:
     //     double lon;
     // };
     // QVector<GeoPoint> m_points;
-
-
 };
 
 #endif

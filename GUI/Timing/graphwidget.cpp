@@ -1,4 +1,3 @@
-
 /* =============================================================================
  * FILE:         graphwidget.cpp
  * MODULE:       Timeline Graph Widget
@@ -35,9 +34,11 @@
 #include <core/Simulation/simulation.h>
 
 
-// %%% Helper Functions %%%
+// Helper Functions
 /* Convert seconds to HH:MM:SS format */
 QString GraphWidget::formatTime(double seconds) {
+    if (seconds < 0)
+        return QStringLiteral("-");
     int totalSeconds = static_cast<int>(seconds);
     int hours   = totalSeconds / 3600;
     int minutes = (totalSeconds % 3600) / 60;
@@ -48,7 +49,7 @@ QString GraphWidget::formatTime(double seconds) {
         .arg(secs,    2, 10, QChar('0'));
 }
 
-// %%% Natural Sort Helpers %%%
+// Natural Sort Helpers
 
 static int extractTrailingNumber(const std::string& s) {
     int i = static_cast<int>(s.size()) - 1;
@@ -58,15 +59,13 @@ static int extractTrailingNumber(const std::string& s) {
     return std::stoi(numStr);
 }
 
-static bool naturalLess(Platform* a, Platform* b) {
-    const std::string& na = a->Name;
-    const std::string& nb = b->Name;
+static bool naturalLessName(const QString& a, const QString& b) {
+    const std::string na = a.toStdString();
+    const std::string nb = b.toStdString();
 
-    // Find where strings diverge
     size_t i = 0;
     while (i < na.size() && i < nb.size() && na[i] == nb[i]) i++;
 
-    // If both diverge at a digit — compare numerically
     if (i < na.size() && i < nb.size() &&
         std::isdigit(static_cast<unsigned char>(na[i])) &&
         std::isdigit(static_cast<unsigned char>(nb[i]))) {
@@ -77,19 +76,35 @@ static bool naturalLess(Platform* a, Platform* b) {
     return na < nb;
 }
 
-// %%% Sorted Platforms Helper %%%
+static bool naturalLess(Platform* a, Platform* b) {
+    return naturalLessName(QString::fromStdString(a->Name),
+                           QString::fromStdString(b->Name));
+}
+
+// Sorted Platforms Helper
 
 QVector<Platform*> GraphWidget::getSortedPlatforms() {
     QVector<Platform*> sorted;
+    if (!h) return sorted;
     for (auto& [key, platform] : h->Platforms) {
         if (platform) sorted.append(platform);
     }
-
     std::sort(sorted.begin(), sorted.end(), naturalLess);
     return sorted;
 }
 
-// %%% Custom Canvas Class %%%
+QVector<TimelineEntry> GraphWidget::getSortedHistory() const {
+    QVector<TimelineEntry> list;
+    for (const auto& e : history)
+        list.append(e);
+    std::sort(list.begin(), list.end(),
+              [](const TimelineEntry& a, const TimelineEntry& b) {
+                  return naturalLessName(a.name, b.name);
+              });
+    return list;
+}
+
+//  Custom Canvas Class
 
 class GraphCanvas : public QWidget {
 public:
@@ -109,7 +124,7 @@ protected:
     }
 };
 
-// %%% Constructor %%%
+// Constructor
 /* Initialize graph widget with default settings */
 GraphWidget::GraphWidget(QWidget *parent): QWidget(parent) {
     setWindowFlags(Qt::Window
@@ -156,30 +171,71 @@ GraphWidget::GraphWidget(QWidget *parent): QWidget(parent) {
     tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     tableWidget->horizontalHeader()->setStretchLastSection(true);
-    tableWidget->setMaximumHeight(150);
+    // No maximum height — table and graph share space ~50/50
+    tableWidget->setMinimumHeight(120);
+
     graphCanvas = new GraphCanvas(this);
-    mainLayout->addWidget(tableWidget);
-    mainLayout->addWidget(graphCanvas, 1);
+    mainLayout->addWidget(tableWidget, 1);   // stretch 1
+    mainLayout->addWidget(graphCanvas, 1);   // stretch 1 → half / half
     setLayout(mainLayout);
+
     graphDataList.append({0, 1.5, 4.0, Qt::blue});
     graphDataList.append({1, 0.5, 3.2, Qt::green});
     graphDataList.append({2, 5.0, 8.5, Qt::red});
     update();
 }
 
-// %%% Hierarchy Management %%%
+
 
 void GraphWidget::setHierarchy(Hierarchy* hier){
     h = hier;
 }
 
-// %%% Refresh Method %%%
+void GraphWidget::updateHistory()
+{
+    if (!h) return;
+
+    // Collect names currently present
+    QSet<QString> currentNames;
+    for (auto& [key, platform] : h->Platforms) {
+        if (!platform) continue;
+        QString name = QString::fromStdString(platform->Name);
+        currentNames.insert(name);
+
+        TimelineEntry& e = history[name];
+        e.name      = name;
+        e.startTime = platform->dynamicModel.startTime;
+        e.deleted   = false;
+
+        // If the model already has a concrete endTime, respect it
+        double modelEnd = platform->dynamicModel.endTime;
+        if (modelEnd >= 0.0) {
+            e.endTime = modelEnd;
+        }
+        // else leave e.endTime as-is (may still be -1 while running)
+
+        if (t >= e.startTime)
+            e.hasStarted = true;
+    }
+
+    // Any history entry no longer present → mark Deleted and freeze end time
+    for (auto it = history.begin(); it != history.end(); ++it) {
+        if (!currentNames.contains(it.key())) {
+            TimelineEntry& e = it.value();
+            if (!e.deleted) {
+                e.deleted = true;
+                if (e.endTime < 0.0)
+                    e.endTime = t;          // freeze at deletion moment
+            }
+        }
+    }
+}
+
+
 
 void GraphWidget::refresh(float delta)
 {
     if (!h) return;
-
-    entity = static_cast<int>(h->Platforms.size());
 
     // Prefer simulation clock; fallback accumulate
     if (Simulation::simulationTime > 0.0f)
@@ -187,70 +243,91 @@ void GraphWidget::refresh(float delta)
     else
         t += static_cast<double>(delta);
 
+    updateHistory();
+
+    // Determine axis range from history (includes deleted entities)
     double maxT = t;
-    for (auto& [key, platform] : h->Platforms) {
-        if (!platform) continue;
-        double st = platform->dynamicModel.startTime;
-        double et = platform->dynamicModel.endTime;
-        if (et < 0) et = t;                 // still running
-        if (et < st) et = st;
-        if (st > maxT) maxT = st;
+    for (const auto& e : history) {
+        if (e.startTime > maxT) maxT = e.startTime;
+        double et = (e.endTime < 0.0) ? t : e.endTime;
         if (et > maxT) maxT = et;
     }
-    // Axis thoda padding
     time = static_cast<int>(std::ceil(maxT));
-    if (time < 1) time = 1;               // never 0 — avoids /0
+    if (time < 1) time = 1;
+
+    entity = history.size();
 
     updateTable();
     if (graphCanvas) graphCanvas->update();
 }
 
-// %%% Table Update %%%
-
 void GraphWidget::updateTable(){
-    if(!h) return;
+    if (!h) return;
     tableWidget->setRowCount(0);
-    QVector<Platform*> sorted = getSortedPlatforms();
-    for (Platform* platform : sorted) {
-        if (!platform /*|| !platform->dynamicModel*/) continue;
-        double startTime     = platform->dynamicModel.startTime;
-        double endTime       = platform->dynamicModel.endTime < 0
-                             ? t : platform->dynamicModel.endTime;
-        if (endTime < startTime) endTime = startTime;
-        double totalDuration = endTime - startTime;
+
+    QVector<TimelineEntry> sorted = getSortedHistory();
+    for (const TimelineEntry& e : sorted) {
+        double startTime = e.startTime;
+        double endTime   = e.endTime;          // may still be -1
+        bool   isPending = (t < startTime);
+        bool   isRunning = (!e.deleted && !isPending && endTime < 0.0);
+        bool   isFinished= (endTime >= 0.0);
+
+        // Display values
+        QString endStr;
+        QString durStr;
         QString status;
-        if (t < startTime) {
+
+        if (e.deleted) {
+            status = "Deleted";
+            endStr = formatTime(endTime);
+            durStr = formatTime(qMax(0.0, endTime - startTime));
+        }
+        else if (isPending) {
             status = "Pending";
-        } else if (t >= startTime && t <= endTime) {
-            status = "Running";
-        } else {
+            endStr = QStringLiteral("-");
+            durStr = QStringLiteral("-");
+        }
+        else if (isRunning) {
+            // Still active → show live end = current time
+            if (simulationPaused)
+                status = "Stop";
+            else
+                status = "Running";
+            endStr = formatTime(t);
+            durStr = formatTime(qMax(0.0, t - startTime));
+        }
+        else { // finished but still present in hierarchy
             status = "Completed";
+            endStr = formatTime(endTime);
+            durStr = formatTime(qMax(0.0, endTime - startTime));
         }
 
         int row = tableWidget->rowCount();
         tableWidget->insertRow(row);
 
-        // ✅ Actual entity name
-        tableWidget->setItem(row, 0, new QTableWidgetItem(
-                                         QString::fromStdString(platform->Name)));
+        tableWidget->setItem(row, 0, new QTableWidgetItem(e.name));
         tableWidget->setItem(row, 1, new QTableWidgetItem(formatTime(startTime)));
-        tableWidget->setItem(row, 2, new QTableWidgetItem(formatTime(endTime)));
-        tableWidget->setItem(row, 3, new QTableWidgetItem(formatTime(totalDuration)));
+        tableWidget->setItem(row, 2, new QTableWidgetItem(endStr));
+        tableWidget->setItem(row, 3, new QTableWidgetItem(durStr));
 
         QTableWidgetItem* statusItem = new QTableWidgetItem(status);
         if (status == "Running") {
             statusItem->setForeground(Qt::green);
         } else if (status == "Completed") {
             statusItem->setForeground(Qt::cyan);
-        } else {
+        } else if (status == "Deleted") {
+            statusItem->setForeground(QColor(255, 100, 100));   // soft red
+        } else if (status == "Stop") {
+            statusItem->setForeground(QColor(255, 165, 0));     // orange
+        } else { // Pending
             statusItem->setForeground(Qt::yellow);
         }
         tableWidget->setItem(row, 4, statusItem);
     }
 }
 
-// %%% Event Handling %%%
-/* Handle mouse wheel events for zoom control */
+
 void GraphWidget::handleWheel(QWheelEvent *event)
 {
     if (event->angleDelta().y() > 0) {
@@ -258,42 +335,40 @@ void GraphWidget::handleWheel(QWheelEvent *event)
     } else {
         if (zoom > 20) zoom -= 10;
     }
-    if(!h) return;
+    if (!h) return;
     graphCanvas->update();
 }
 
-// %%% Graph Drawing %%%
-/* Main graph drawing method */
+
 void GraphWidget::drawGraph(QWidget* canvas) {
-    if(!h) return;
+    if (!h) return;
 
     QPainter p(canvas);
     p.setRenderHint(QPainter::Antialiasing);
 
     int w = canvas->width();
-    int h = canvas->height();
+    int hgt = canvas->height();
 
+    QVector<TimelineEntry> sorted = getSortedHistory();
+    entity = sorted.size();
 
     QFontMetrics fm(p.font());
     int maxNameWidth = 50;
-    for (auto& [key, platform] : this->h->Platforms) {
-        if (platform) {
-            int nameWidth = fm.horizontalAdvance(
-                                QString::fromStdString(platform->Name)) + 15;
-            if (nameWidth > maxNameWidth) maxNameWidth = nameWidth;
-        }
+    for (const auto& e : sorted) {
+        int nameWidth = fm.horizontalAdvance(e.name) + 15;
+        if (nameWidth > maxNameWidth) maxNameWidth = nameWidth;
     }
 
     int leftPadding  = maxNameWidth;
     int rightPadding = 50;
-    int topPadding   = 50;
-    int botPadding   = 50;
+    int topPadding   = 30;
+    int botPadding   = 40;
 
     p.setPen(QPen(Qt::white, 2));
 
     int startX  = leftPadding;
     int endX    = w - rightPadding;
-    int bottomY = h - botPadding;
+    int bottomY = hgt - botPadding;
     int topY    = topPadding;
 
     // Draw X-axis
@@ -301,31 +376,29 @@ void GraphWidget::drawGraph(QWidget* canvas) {
     drawXTick(p, startX, endX, bottomY, w);
 
     QVector<QString> entityNames;
-    QVector<Platform*> sorted = getSortedPlatforms();
-    for (Platform* platform : sorted) {
-        entityNames.append(QString::fromStdString(platform->Name));
-    }
+    for (const auto& e : sorted)
+        entityNames.append(e.name);
 
     // Draw Y-axis
     p.drawLine(startX, bottomY, startX, topY);
-    drawYTick(p, bottomY, topY, startX, h, entityNames);
+    drawYTick(p, bottomY, topY, startX, hgt, entityNames);
 
     // Set clipping area
     QRect chartArea(startX, topY, endX - startX, bottomY - topY);
     p.setClipRect(chartArea);
 
-    drawData(p, startX, bottomY, w, h);
+    drawData(p, startX, bottomY, w, hgt);
 
     p.setClipping(false);
 }
 
-/* Draw entity timeline data — naturally sorted order */
+/* Draw entity timeline data — naturally sorted order, includes deleted */
 void GraphWidget::drawData(QPainter &p, int startX, int bottomY,
                            int canvasWidth, int canvasHeight)
 {
-    if (!h || h->Platforms.empty()) return;
+    if (history.isEmpty()) return;
 
-    const int axisTime = (time > 0) ? time : 1;   // never divide by 0
+    const int axisTime = (time > 0) ? time : 1;
 
     int availableWidth  = canvasWidth  - 100;
     int availableHeight = canvasHeight - 100;
@@ -336,37 +409,41 @@ void GraphWidget::drawData(QPainter &p, int startX, int bottomY,
                           ? (availableHeight / (double)entity) * (zoom / 100.0)
                           : 0.0;
 
-    QVector<Platform*> sorted = getSortedPlatforms();
+    QVector<TimelineEntry> sorted = getSortedHistory();
     int entityNum = 0;
 
-    for (Platform* platform : sorted) {
-        if (!platform) continue;
-
-        double startTime = platform->dynamicModel.startTime;
-        double endTime   = platform->dynamicModel.endTime;
-        if (endTime < 0) endTime = t;          // open-ended → now
+    for (const TimelineEntry& e : sorted) {
+        double startTime = e.startTime;
+        double endTime   = e.endTime;
+        if (endTime < 0.0) endTime = t;          // still open → current time
         if (endTime < startTime) endTime = startTime;
 
         int x1 = startX + static_cast<int>(startTime * xSpacing);
         int x2 = startX + static_cast<int>(endTime   * xSpacing);
         int y  = bottomY - static_cast<int>(entityNum * ySpacing);
 
-        int barHeight = 8;                     // was 4 — zyada visible
+        int barHeight = 8;
         int dotRadius = 4;
         int barWidth  = x2 - x1;
-        if (barWidth < 2) barWidth = 2;        // kam se kam dikhe
+        if (barWidth < 2) barWidth = 2;
 
-        // Pending: abhi start nahi hua — optional faint marker at start
-        bool pending = (t < startTime);
-        bool completed = (t > endTime);
+        bool pending   = (t < startTime);
+        bool completed = (e.endTime >= 0.0) || e.deleted;
 
         if (pending) {
-            p.setBrush(QColor(120, 120, 0));   // dim yellow segment placeholder
+            // Only a start marker
+            p.setBrush(QColor(120, 120, 0));
             p.setPen(Qt::NoPen);
-            // sirf start tick
             p.drawEllipse(QPoint(x1, y), dotRadius, dotRadius);
         } else {
-            p.setBrush(completed ? QColor(0, 180, 180) : Qt::cyan);
+            // Bar colour: deleted → muted red-ish, completed → teal, running → cyan
+            if (e.deleted)
+                p.setBrush(QColor(180, 80, 80));
+            else if (completed)
+                p.setBrush(QColor(0, 180, 180));
+            else
+                p.setBrush(Qt::cyan);
+
             p.setPen(Qt::NoPen);
             p.drawRect(x1, y - barHeight / 2, barWidth, barHeight);
 
@@ -374,13 +451,17 @@ void GraphWidget::drawData(QPainter &p, int startX, int bottomY,
             p.setPen(QPen(Qt::white, 1));
             p.drawEllipse(QPoint(x1, y), dotRadius, dotRadius);
 
-            p.setBrush(Qt::red);
-            p.drawEllipse(QPoint(x2, y), dotRadius, dotRadius);
+            // End marker only when the entity has a fixed end
+            if (completed) {
+                p.setBrush(Qt::red);
+                p.drawEllipse(QPoint(x2, y), dotRadius, dotRadius);
+            }
         }
 
         entityNum++;
     }
 }
+
 /* Draw X-axis ticks and time labels */
 void GraphWidget::drawXTick(QPainter &p, int startX, int endX, int y, int canvasWidth)
 {
@@ -390,14 +471,12 @@ void GraphWidget::drawXTick(QPainter &p, int startX, int endX, int y, int canvas
     if (availableWidth <= 0 || time <= 0)
         return;
 
-    // time = total axis range in SECONDS (refresh set karta hai)
     double tickSpacing = (availableWidth / static_cast<double>(time)) * (zoom / 100.0);
 
     QFontMetrics fm(p.font());
     QString sampleTime = formatTime(time);
     int textWidth = fm.horizontalAdvance(sampleTime) + 12;
 
-    // Step in seconds so labels na overlap karein
     int step = 1;
     if (tickSpacing < 1e-6) {
         step = qMax(1, time);
@@ -406,7 +485,6 @@ void GraphWidget::drawXTick(QPainter &p, int startX, int endX, int y, int canvas
         step = qMax(1, minStep);
     }
 
-    // Nice steps: 1, 5, 10, 30, 60, 120, 300, 600...
     static const int kNice[] = {1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600};
     for (int nice : kNice) {
         if (nice >= step) {
@@ -426,8 +504,7 @@ void GraphWidget::drawXTick(QPainter &p, int startX, int endX, int y, int canvas
 
         p.drawLine(x, y - 5, x, y + 5);
 
-        QString timeLabel = formatTime(i);   // seconds → HH:MM:SS
-
+        QString timeLabel = formatTime(i);
         QRect textRect(x - 40, y + 8, 80, 20);
         p.drawText(textRect, Qt::AlignCenter, timeLabel);
     }
@@ -436,61 +513,29 @@ void GraphWidget::drawXTick(QPainter &p, int startX, int endX, int y, int canvas
     p.drawText(QRect(startX - 20, y + 8, 40, 20), Qt::AlignCenter, formatTime(0));
     p.drawText(QRect(endX - 40, y + 8, 80, 20), Qt::AlignCenter, formatTime(time));
 }
-/* Draw Y-axis ticks and entity labels */
+
+/* Draw Y-axis ticks and entity labels — ALWAYS show every entity name */
 void GraphWidget::drawYTick(QPainter &p, int startY, int endY, int x,
                             int canvasHeight, QVector<QString> entityNames) {
+    Q_UNUSED(canvasHeight);
     int availableHeight = startY - endY;
     int numEntities     = entity;
     if (numEntities == 0) return;
-    double spacing = (availableHeight / (double)numEntities) * (zoom / 100.0);
-    int minVerticalGap = 25;
-    int step = 1;
-    if (spacing < minVerticalGap) {
-        step = qCeil(minVerticalGap / spacing);
-    }
 
-    for (int i = 0; i < numEntities; i += step) {
-        int y = startY - (i * spacing);
+    double spacing = (availableHeight / (double)numEntities) * (zoom / 100.0);
+
+    // Always draw every label (user request). If they overlap the user can zoom.
+    for (int i = 0; i < numEntities; ++i) {
+        int y = startY - static_cast<int>(i * spacing);
         if (y < endY) break;
 
         p.drawLine(x - 5, y, x + 5, y);
-
 
         QString label = (i < entityNames.size())
                             ? entityNames[i]
                             : "Entity" + QString::number(i);
 
-        if (i > 0 && step == 1 && spacing < 30) {
-            if (i % 2 == 0) {
-                QRect textRect(0, y - 10, x - 8, 20);
-                p.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, label);
-            }
-        } else {
-            QRect textRect(0, y - 10, x - 8, 20);
-            p.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, label);
-        }
-    }
-
-    if (step > 1 && numEntities > 0) {
-        // First entity
-        QString firstLabel = entityNames.isEmpty()
-                                 ? "Entity0" : entityNames[0];
-        int y = startY;
-        p.drawLine(x - 5, y, x + 5, y);
-        QRect firstRect(0, y - 10, x - 8, 20);
-        p.drawText(firstRect, Qt::AlignRight | Qt::AlignVCenter, firstLabel);
-
-        // Last entity
-        if (numEntities > 1) {
-            QString lastLabel = ((numEntities - 1) < entityNames.size())
-                                    ? entityNames[numEntities - 1]
-                                    : "Entity" + QString::number(numEntities - 1);
-            y = startY - ((numEntities - 1) * spacing);
-            if (y >= endY) {
-                p.drawLine(x - 5, y, x + 5, y);
-                QRect lastRect(0, y - 10, x - 8, 20);
-                p.drawText(lastRect, Qt::AlignRight | Qt::AlignVCenter, lastLabel);
-            }
-        }
+        QRect textRect(0, y - 10, x - 8, 20);
+        p.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, label);
     }
 }

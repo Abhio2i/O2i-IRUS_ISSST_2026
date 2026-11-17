@@ -32,8 +32,6 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <string>
-#include <vector>
-#include <unordered_set>
 
 // ── Auto-integrated component headers ────────────────────────────────────────
 #include <core/Hierarchy/Components/transform.h>
@@ -67,15 +65,32 @@ public:
     ~Weapon() override;
 
     // ── WeaponType enum (same role as Sensor::SubType) ────────────────────────
-    enum class WeaponType     { Missile, Sonobuoy, Bomb, Torpedo, Artillery, Rocket, Flare, Chaff };
-    enum class GuidanceType   { Unguided, SemiActive, FullyActive, PassiveInfrared,
+    enum  WeaponType     { Missile, Sonobuoy, Bomb, Torpedo, Artillery, Rocket, Flare, Chaff };
+    const std::string weaponNames[8] = {"Missile", "Sonobuoy", "Bomb", "Torpedo", "Artillery", "Rocket", "Flare", "Chaff"};
+
+    enum  GuidanceType   { Unguided, SemiActive, FullyActive, PassiveInfrared,
                               CommandGuided, InertialGuidance };
-    enum class DetonationType { Impact, Proximity, Timed, Command };
-    enum class PropulsionType { SolidRocket, LiquidRocket, Turbofan, Ramjet, Turboprop, Gravity };
+    const std::string guidanceNames[6] = {"Unguided", "SemiActive", "FullyActive", "PassiveInfrared", "CommandGuided", "InertialGuidance"};
+
+    enum  DetonationType { Impact, Proximity, Timed, Command };
+    const std::string detonationNames[4] = {"Impact", "Proximity", "Timed", "Command"};
+
+    enum  PropulsionType { SolidRocket, LiquidRocket, Turbofan, Ramjet, Turboprop, Gravity };
+    const std::string propulsionNames[6] = {"SolidRocket", "LiquidRocket", "Turbofan", "Ramjet", "Turboprop", "Gravity"};
+
 
     // ── Type tag (overridden by each subclass, same role as Sensor::subType) ──
     WeaponType weaponType = WeaponType::Missile;
-    virtual QString weaponTypeName() const { return "Missile"; }
+    GuidanceType guidanceType = GuidanceType::InertialGuidance;
+    DetonationType detonationType = DetonationType::Proximity;
+    PropulsionType propulsionType = PropulsionType::Gravity;
+
+    QString weaponTypeName() const{return QString::fromStdString(weaponNames[static_cast<int>(weaponType)]);}
+    QString guidanceTypeName() const{return QString::fromStdString(guidanceNames[static_cast<int>(guidanceType)]);}
+
+    QString detonationTypeName() const{return QString::fromStdString(detonationNames[static_cast<int>(detonationType)]);}
+
+    QString propulsionTypeName() const{return QString::fromStdString(propulsionNames[static_cast<int>(propulsionType)]);}
 
     // ── Ownership ─────────────────────────────────────────────────────────────
     Entity *parentEntity = nullptr;
@@ -84,156 +99,34 @@ public:
     // AUTO-INTEGRATED COMPONENTS  (created in constructor, same as Platform)
     // =========================================================================
     Transform      transform      ;
-    Rigidbody      rigidbody      ;
     Collider       collider       ;
-    Trajectory     trajectory     ;
+    // Trajectory     trajectory  ;
     MeshRenderer2D meshRenderer2d ;
-    DynamicModel   dynamicModel   ;
-    CrossSection   crossSection   ;
+    // CrossSection   crossSection;
 
-    // ── Shared physical fields ────────────────────────────────────────────────
-    std::string designation;
-    float length        = 3.7f;
-    float diameter      = 0.178f;
-    float totalMass     = 45.0f;
-    float payloadMass   = 20.0f;
-    float fuelMass      = 15.0f;
+    QVector3D Velocity;
+    float Speed;
+    QVector3D TargetPosition;
+    Platform* TargetEntity;
+    QJsonObject getWeaponTypeObj() const;
+    void setWeaponTypeObj(const QJsonObject &obj);
 
-    // ── Shared performance fields ─────────────────────────────────────────────
-    float maxVelocity   = 2500.0f;
-    float minVelocity   = 100.0f;
-    float maxRange      = 100000.0f;
-    float minRange      = 500.0f;
-    float maxAltitude   = 20000.0f;
-    float minAltitude   = 0.0f;
-    float maximumG      = 25.0f;
-    float flightTimeMax = 600.0f;
+    QJsonObject getGuidenceTypeObj() const;
+    void setGuidenceTypeObj(const QJsonObject &obj);
 
-    // ── Shared detonation fields ──────────────────────────────────────────────
-    DetonationType detonationType = DetonationType::Proximity;
-    float proximityRange = 100.0f;
-    float timerDelay     = 5.0f;
+    QJsonObject getDetonationTypeObj() const;
+    void setDetonationTypeObj(const QJsonObject &obj);
 
-    // ── Shared warhead fields ─────────────────────────────────────────────────
-    float blastRadius     = 200.0f;
-    float effectiveRadius = 500.0f;
-    float peakPressure    = 500.0f;
-    std::string warheadType;
+    QJsonObject getPropulsionTypeObj() const;
+    void setPropulsionTypeObj(const QJsonObject &obj);
+    virtual void Update() = 0;
 
-    // ── Shared launch / safety fields ─────────────────────────────────────────
-    float launchG            = 5.0f;
-    float preflightCheckTime = 30.0f;
-    int   rearmTime          = 600;
-    bool  armed              = false;
-    bool  safed              = true;
 
-    // ── Countermeasures (Flare / Chaff use these) ─────────────────────────────
-    float flareDispensed = 0;
-    float chaffDispensed = 0;
-    bool  chainsawMode   = false;
+private:
+    bool statesaved = false;
+    QJsonObject InitalState;
 
-    // ── Target tracking ───────────────────────────────────────────────────────
-    std::unordered_set<Platform*> detects;
-    QVector<WeaponTarget>         targets;
-    Platform *targetEntity = nullptr;
 
-    virtual void Update();
-
-    // ── Virtual launch() — same role as Sensor::scan() ───────────────────────
-    // weapon.cpp has an empty stub.
-    // Each subclass (Missile, Bomb, etc.) overrides with its own behaviour.
-    virtual void launch();
-
-    // ── Other shared virtual behaviours ──────────────────────────────────────
-    virtual void  flyToTarget();
-    virtual void  updateGuidance();
-    virtual void  checkDetonation();
-    virtual void  scan();
-    virtual bool  canEngage(Platform *target);
-    virtual float calculateImpactTime(Platform *target);
-    virtual float calculateLaunchPoint();
-    void          disarmWeapon();
-    void          rearmWeapon();
-    void          clearTargets();
-    void init();
-    // ── Entity interface overrides ────────────────────────────────────────────
-    void spawn()                                               override;
-    std::vector<std::string> getSupportedComponents()          override;
-    void addSupportedcomponent()                               override;
-    void addComponent   (std::string name)                     override;
-    void removeComponent(std::string name)                     override;
-    QJsonObject getComponent(std::string name)                 override;
-    void updateComponent(QString name, const QJsonObject& obj) override;
-
-    // ── Serialisation ─────────────────────────────────────────────────────────
-    // Subclass calls Weapon::toJson() first, then appends its own fields.
-    // Subclass calls Weapon::fromJson() first, then reads its own fields.
-    QJsonObject toJson()              const override;
-    void        fromJson(const QJsonObject&)  override;
-
-    // ── Shared enum helpers ───────────────────────────────────────────────────
-    QString detonationTypeToString()              const;
-    void    setDetonationTypeFromString(const QString&);
-
-    // ── Static helper (same pattern as Sensor::getSubTypeFromString) ─────────
-    static WeaponType getWeaponTypeFromString(const QString& str) {
-        if (str == "Missile")   return WeaponType::Missile;
-        if (str == "Bomb")      return WeaponType::Bomb;
-        if (str == "Torpedo")   return WeaponType::Torpedo;
-        if (str == "Artillery") return WeaponType::Artillery;
-        if (str == "Rocket")    return WeaponType::Rocket;
-        if (str == "Flare")     return WeaponType::Flare;
-        if (str == "Chaff")     return WeaponType::Chaff;
-        return WeaponType::Missile;
-    }
-    QString weaponTypeToString()              const;
-    QString weaponTypeNameFromEnum(WeaponType t) const;
-
-    // ── Sync base fields into sub-components ─────────────────────────────────
-    void syncComponentsFromWeaponData();
-
-    // ── Flight monitor state (Missile uses these; other types ignore them) ────
-    bool  m_flightActive      = false;
-    bool  m_updateRunning     = false;
-    float m_distanceTravelled = 0.0f;
-    float m_flightTime        = 0.0f;
-    float m_launchHeading     = 0.0f;
-    bool  isLaunched          = false;
-    bool  isDead              = false;
-
-    double m_targetLat  = 28.6358;
-    double m_targetLon  = 77.2244;
-    Transform *m_target = nullptr;
-    Platform  *m_targetplatform = nullptr;
-    float      m_detonationRange = 5000.0f;
-    CanvasWidget *m_canvas = nullptr;
-
-    QTimer       *m_flightCheckTimer = nullptr;
-    QTimer       *m_updateTimer      = nullptr;
-    QElapsedTimer m_dtClock;
-
-    void setCanvas(CanvasWidget* canvas) { m_canvas = canvas; }
-    void setTarget(double lat, double lon, float detonationRangeMetres = 5000.0f);
-    void setTarget(Transform *tr, float detonationRangeMetres);
-    double getTargetLat()       const { return m_targetLat; }
-    double getTargetLon()       const { return m_targetLon; }
-    float  getDetonationRange() const { return m_detonationRange; }
-
-    void startFlightMonitor();
-    void stopFlightMonitor();
-    void pauseFlightMonitor();   // pauses timer without resetting state
-    void resumeFlightMonitor();  // restarts timer from where it left off
-
-    // ── Virtual flight hooks (empty stubs here, Missile overrides all 5) ──────
-    virtual void      missileStart();
-    virtual void      checkFlightState();
-    virtual void      missileUpdate(float deltaTime);
-    virtual QVector3D calcTargetVector() const;
-    virtual void      missileEnd();
-
-signals:
-    void missileDetonated(const QString& weaponID,
-                          double lat, double lon, double alt);
 };
 
 #endif // WEAPON_H

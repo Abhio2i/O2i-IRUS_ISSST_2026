@@ -118,6 +118,12 @@ EditorCanvas::EditorCanvas(MapWidget *map, QWidget *parent)
             this, [this](const QString& entityId) {
                 emit entityLeaveFormationRequested(entityId);
             });
+
+    connect(m_trajectoryContextMenu, &TrajectoryContextMenu::applyPatternRequested,
+            this, [this](const QString& pattern) {
+                if (m_isEditingTrajectory)
+                    onApplyDefaultPatternRequested(m_editingTrajectoryEntityId, pattern);
+            });
 }
 
 // ---------------------------------------------------------------------
@@ -464,7 +470,7 @@ void EditorCanvas::beginDrag(const QPointF& canvasPos)
         ECS::GeocordComponent* geo = world->GetComponent<ECS::GeocordComponent>(e);
         if (geo)
             m_dragStartPositions.insert(e, QPointF(geo->lon, geo->lat));
-        if (m_selectionModeActive) {
+            if (m_selectionModeActive || m_mode == Scale) {
             ECS::trajectoryPathComponent* pathComp = world->GetComponent<ECS::trajectoryPathComponent>(e);
             if (pathComp && pathComp->activeCount > 0) {
                 QVector<QPointF> pts;
@@ -484,7 +490,7 @@ void EditorCanvas::beginDrag(const QPointF& canvasPos)
             m_dragStartPositions.insert(m_selectedEntity, QPointF(geo->lon, geo->lat));
         }
 
-        if (m_selectionModeActive) {
+        if (m_selectionModeActive || m_mode == Scale) {
             ECS::trajectoryPathComponent* pathComp = world->GetComponent<ECS::trajectoryPathComponent>(m_selectedEntity);
             if (pathComp && pathComp->activeCount > 0) {
                 QVector<QPointF> pts;
@@ -503,6 +509,30 @@ void EditorCanvas::beginDrag(const QPointF& canvasPos)
             m_dragStartShapePositions.insert(sid,
                                              QPointF(props["longitude"].toDouble(), props["latitude"].toDouble()));
         }
+    }
+    m_isScaling = false;
+
+    if (m_mode == Scale) {
+        m_isScaling = true;
+        MapWidget* map = getMap();
+        if (!map) return;
+
+        QPointF sum(0, 0);
+        int n = 0;
+        QSet<ECS::Entity> ents = selectedEntities();
+
+        for (ECS::Entity e : ents) {
+            ECS::GeocordComponent* geo = world->GetComponent<ECS::GeocordComponent>(e);
+            if (!geo) continue;
+            QPointF canvas = map->geoToCanvas(geo->lat, geo->lon);
+            sum += canvas;
+            ++n;
+        }
+
+        if (n > 0)
+            m_scalePivotCanvas = sum / n;
+        else
+            m_scalePivotCanvas = canvasPos;
     }
 }
 
@@ -646,7 +676,6 @@ void EditorCanvas::updateRotate(const QPointF& canvasPos)
             }
         }
     }
-    // ============================================
     update();
 }
 
@@ -656,6 +685,8 @@ void EditorCanvas::endDrag()
     m_dragStartPositions.clear();
     m_dragStartShapePositions.clear();
     m_dragStartTrajectoryPositions.clear();
+    // added for scales
+    m_isScaling = false;
 }
 
 void EditorCanvas::moveSelectedGisShapes(double deltaLon, double deltaLat)
@@ -689,7 +720,7 @@ bool EditorCanvas::handleMousePress(QMouseEvent* event)
         return true;
     }
 
-    const bool inSelectionMode = (m_mode == Translate && m_selectionModeActive);
+    const bool inSelectionMode = ((m_mode == Translate && m_selectionModeActive) || m_mode == Scale);
 
     if (inSelectionMode) {
         ECS::Entity hitEntity;
@@ -729,7 +760,6 @@ bool EditorCanvas::handleMousePress(QMouseEvent* event)
         return true;
     }
 
-    //modes (View / Move / Rotate)
     ECS::Entity hitEntity;
     float hitRadius = 0.f;
     if (findEntityAt(event->pos(), hitEntity, hitRadius)) {
@@ -737,8 +767,7 @@ bool EditorCanvas::handleMousePress(QMouseEvent* event)
         const QString hierarchyId = m_entityToId.value(hitEntity, QString());
         if (!hierarchyId.isEmpty())
             emit entitySelectedById(hierarchyId);
-
-        if (m_mode == Translate || m_mode == Rotate)
+        if (m_mode == Translate || m_mode == Rotate || m_mode == Scale)
             beginDrag(event->pos());
         return true;
     }
@@ -772,14 +801,12 @@ bool EditorCanvas::handleMouseMove(QMouseEvent* event)
         update();
         return true;
     }
-    // ====================(distance/angle preview) START ====================
     if (m_isEditingTrajectory && !m_isDraggingWaypoint) {
         m_currentEditMousePos = event->pos();
         m_hasEditMousePos     = true;
         update();
         return true;
     }
-    // ====================(distance/angle preview) END ======================
 
     if (m_isRubberBanding) {
         if (!(event->buttons() & Qt::LeftButton))
@@ -803,6 +830,11 @@ bool EditorCanvas::handleMouseMove(QMouseEvent* event)
 
     if (m_mode == Rotate) {
         updateRotate(event->pos());
+        return true;
+    }
+    // added for scale
+    if (m_mode == Scale && m_isScaling) {
+        updateScale(event->pos());
         return true;
     }
     return false;
@@ -1096,8 +1128,11 @@ void EditorCanvas::drawContent(QPainter& painter)
             float radius = kDefaultIconRadius;
             if (ECS::SpriteComponent* sprite = world->GetComponent<ECS::SpriteComponent>(e))
                 radius = qMax(sprite->scale / 2.0f, kMinHitRadius);
+            if (m_mode == Scale)
+                drawScaleGizmo(painter, canvasPos);
+            else
+                drawSelectionCircle(painter, canvasPos, radius);
 
-            drawSelectionCircle(painter, canvasPos, radius);
         }
     }
     else if (m_hasSelection) {
@@ -1121,6 +1156,9 @@ void EditorCanvas::drawContent(QPainter& painter)
                     break;
                 case Rotate:
                     drawRotateGizmo(painter, canvasPos, geo->heading);
+                    break;
+                case Scale:
+                    drawScaleGizmo(painter, canvasPos);
                     break;
                 default:
                     drawSelectionCircle(painter, canvasPos, radius);
@@ -1456,7 +1494,6 @@ void EditorCanvas::drawTrajectoryEditOverlay(QPainter& painter)
         painter.setFont(QFont("Arial", 8, QFont::Bold));
         painter.drawText(poly[i] + QPointF(8, -6), QString::number(i + 1));
     }
-    // ====================  (distance/angle preview) START ====================
     if (m_hasEditMousePos && !m_isDraggingWaypoint && !m_editWaypoints.isEmpty()) {
         const EditableWaypoint& last = m_editWaypoints.last();
         const QPointF mouseGeo = map->canvasToGeo(m_currentEditMousePos);
@@ -1484,7 +1521,6 @@ void EditorCanvas::drawTrajectoryEditOverlay(QPainter& painter)
         painter.setPen(Qt::white);
         painter.drawText(textPos, label);
     }
-    // ====================  (distance/angle preview) END ====================
 
     painter.restore();
 }
@@ -2035,6 +2071,14 @@ bool EditorCanvas::getEntityGeo(const QString& hierarchyId, double& outLat, doub
     ECS::World* world = const_cast<EditorCanvas*>(this)->getWorld();
     if (!world)
         return false;
+    if (ECS::Entity_Data* data = world->GetComponent<ECS::Entity_Data>(it.value())) {
+        if (!data->active || data->destroy)
+            return false;
+    } else if (m_hierarchy) {
+        auto eit = m_hierarchy->Entities.find(hierarchyId.toStdString());
+        if (eit != m_hierarchy->Entities.end() && eit->second && !eit->second->Active)
+            return false;
+    }
     ECS::GeocordComponent* geo = world->GetComponent<ECS::GeocordComponent>(it.value());
     if (!geo)
         return false;
@@ -2042,6 +2086,7 @@ bool EditorCanvas::getEntityGeo(const QString& hierarchyId, double& outLat, doub
     outLon = geo->lon;
     return true;
 }
+
 void EditorCanvas::onWaypointSelectedFromInspector(const QString& entityId, int waypointIndex)
 {
     m_highlightedWaypointEntityId = entityId;
@@ -2186,4 +2231,249 @@ static QPointF destinationPoint(double lat1, double lon1, double bearingDegVal, 
     lonDeg = std::fmod(lonDeg + 540.0, 360.0) - 180.0;
     const double latDeg = qRadiansToDegrees(phi2);
     return QPointF(lonDeg, latDeg);
+}
+
+void EditorCanvas::onApplyDefaultPatternRequested(const QString& hierarchyId, const QString& pattern)
+{
+    if (hierarchyId.isEmpty() || !m_hierarchy)
+        return;
+
+    auto it = m_hierarchy->Entities.find(hierarchyId.toStdString());
+    if (it == m_hierarchy->Entities.end() || !it->second)
+        return;
+
+    Platform* platform = dynamic_cast<Platform*>(it->second);
+    if (!platform)
+        return;
+
+    double centerLat = platform->transform.getLatitude();
+    double centerLon = platform->transform.getLongitude();
+
+    const int waypointCount = 12;
+    const float radius = 40.0f;   // km
+    const float length = 80.0f;   // km
+
+    if (m_isEditingTrajectory && m_editingTrajectoryEntityId == hierarchyId) {
+        m_editWaypoints.clear();
+        m_selectedWaypointIndex = -1;
+    }
+
+    auto addWp = [&](double lat, double lon) {
+        if (m_isEditingTrajectory && m_editingTrajectoryEntityId == hierarchyId) {
+            EditableWaypoint wp;
+            wp.lat = lat;
+            wp.lon = lon;
+            wp.alt = 1000;
+            wp.speed = 800;
+            m_editWaypoints.append(wp);
+        }
+    };
+
+    addWp(centerLat, centerLon);
+
+    for (int i = 1; i < waypointCount; ++i) {
+        double nextLat = centerLat;
+        double nextLon = centerLon;
+
+        if (pattern == "Line") {
+            QPointF p = destinationPoint(centerLat, centerLon, 0.0,
+                                         (length / (waypointCount - 1)) * i);
+            nextLat = p.y();
+            nextLon = p.x();
+        }
+        else if (pattern == "Zigzag") {
+            QPointF p = destinationPoint(centerLat, centerLon, 0.0,
+                                         (length / (waypointCount - 1)) * i);
+            nextLat = p.y() + ((i % 2 == 0) ? 0.04 : -0.04);
+            nextLon = p.x();
+        }
+        else if (pattern == "Circle" || pattern == "Circular") {
+            float angle = (2.0f * M_PI * i) / waypointCount;
+            double dLat = (radius * std::sin(angle)) / 111.111;
+            double dLon = (radius * std::cos(angle)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+            nextLat = centerLat + dLat;
+            nextLon = centerLon + dLon;
+        }
+        else if (pattern == "Spiral") {
+            float angle = (2.0f * M_PI * i) / waypointCount;
+            float r = radius * (0.3f + 0.7f * ((float)i / waypointCount));
+            double dLat = (r * std::sin(angle)) / 111.111;
+            double dLon = (r * std::cos(angle)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+            nextLat = centerLat + dLat;
+            nextLon = centerLon + dLon;
+        }
+        else if (pattern == "Rectangle") {
+            int q = (i * 4) / waypointCount;
+            float h = q * 90.0f;
+            QPointF p = destinationPoint(centerLat, centerLon, h, length * 0.25f);
+            nextLat = p.y();
+            nextLon = p.x();
+        }
+        else if (pattern == "Oval" || pattern == "Ellipse") {
+            float t = (2.0f * M_PI * i) / waypointCount;
+            float a = radius * 1.4f;
+            float b = radius * 0.7f;
+            double dLat = (b * std::sin(t)) / 111.111;
+            double dLon = (a * std::cos(t)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+            nextLat = centerLat + dLat;
+            nextLon = centerLon + dLon;
+        }
+        else if (pattern == "Racecourse") {
+            float t = (float)i / waypointCount;
+            float a = length * 0.4f;
+            float b = radius * 0.5f;
+            double dLat = (b * std::sin(2 * M_PI * t)) / 111.111;
+            double dLon = (a * std::cos(2 * M_PI * t)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+            nextLat = centerLat + dLat;
+            nextLon = centerLon + dLon;
+        }
+        else {
+            QPointF p = destinationPoint(centerLat, centerLon, 0.0,
+                                         (length / (waypointCount - 1)) * i);
+            nextLat = p.y();
+            nextLon = p.x();
+        }
+        addWp(nextLat, nextLon);
+    }
+
+    update();
+    if (getMap())
+        getMap()->update();
+}
+
+void EditorCanvas::updateScale(const QPointF& canvasPos)
+{
+    if (!m_isScaling || m_simulationRunning)
+        return;
+
+    MapWidget* map = getMap();
+    ECS::World* world = getWorld();
+    if (!map || !world)
+        return;
+
+    const float dist0 = QLineF(m_scalePivotCanvas, m_dragStartCanvas).length();
+    const float dist1 = QLineF(m_scalePivotCanvas, canvasPos).length();
+    if (dist0 < 2.0f)
+        return;
+
+    float factor = dist1 / dist0;
+    factor = qBound(0.05f, factor, 20.0f);
+
+    QPointF pivotGeo = map->canvasToGeo(m_scalePivotCanvas);
+    const double pivotLon = pivotGeo.x();
+    const double pivotLat = pivotGeo.y();
+
+    for (auto it = m_dragStartPositions.constBegin(); it != m_dragStartPositions.constEnd(); ++it)
+    {
+        ECS::Entity e = it.key();
+        ECS::GeocordComponent* geo = world->GetComponent<ECS::GeocordComponent>(e);
+        if (!geo)
+            continue;
+
+        const double origLon = it.value().x();
+        const double origLat = it.value().y();
+
+        const double dLon = origLon - pivotLon;
+        const double dLat = origLat - pivotLat;
+
+        const double newLon = pivotLon + dLon * factor;
+        const double newLat = pivotLat + dLat * factor;
+
+        const double deltaLon = newLon - origLon;
+        const double deltaLat = newLat - origLat;
+
+        geo->lon = newLon;
+        geo->lat = newLat;
+
+        const QString hierarchyId = m_entityToId.value(e, QString());
+        if (!hierarchyId.isEmpty() && m_hierarchy) {
+            auto pit = m_hierarchy->Platforms.find(hierarchyId.toStdString());
+            if (pit != m_hierarchy->Platforms.end() && pit->second) {
+                pit->second->transform.setGeoCord(newLat, newLon);
+            } else {
+                auto eit = m_hierarchy->Entities.find(hierarchyId.toStdString());
+                if (eit != m_hierarchy->Entities.end() && eit->second) {
+                    if (Platform* platform = dynamic_cast<Platform*>(eit->second))
+                        platform->transform.setGeoCord(newLat, newLon);
+                    else if (Specialzone* spzone = dynamic_cast<Specialzone*>(eit->second))
+                        spzone->transform.setGeoCord(newLat, newLon);
+                    else if (FixedPoints* fxd = dynamic_cast<FixedPoints*>(eit->second))
+                        fxd->transform.setGeoCord(newLat, newLon);
+                }
+            }
+        }
+
+        // 2. Trajectory sirf SHIFT (scale nahi)
+        auto trajIt = m_dragStartTrajectoryPositions.constFind(e);
+        if (trajIt != m_dragStartTrajectoryPositions.constEnd()) {
+            ECS::trajectoryPathComponent* pathComp =
+                world->GetComponent<ECS::trajectoryPathComponent>(e);
+            if (pathComp) {
+                const QVector<QPointF>& startPts = trajIt.value();
+                const int count = qMin(static_cast<int>(pathComp->activeCount),
+                                       static_cast<int>(startPts.size()));
+
+                for (int i = 0; i < count; ++i) {
+                    pathComp->path[i].lon = startPts[i].x() + deltaLon;
+                    pathComp->path[i].lat = startPts[i].y() + deltaLat;
+                }
+                pathComp->delta = true;
+
+                // Hierarchy trajectory sync
+                if (!hierarchyId.isEmpty() && m_hierarchy) {
+                    auto pit = m_hierarchy->Platforms.find(hierarchyId.toStdString());
+                    if (pit != m_hierarchy->Platforms.end() && pit->second) {
+                        Trajectory& traj = pit->second->trajectory;
+                        const int wpCount = qMin(static_cast<int>(traj.Trajectories.size()), count);
+                        for (int i = 0; i < wpCount; ++i) {
+                            Waypoints* wp = traj.Trajectories[i];
+                            if (!wp || !wp->position)
+                                continue;
+                            wp->position->x = static_cast<float>(pathComp->path[i].lat);
+                            wp->position->z = static_cast<float>(pathComp->path[i].lon);
+                            if (wp->geocord) {
+                                wp->geocord->latitude  = pathComp->path[i].lat;
+                                wp->geocord->longitude = pathComp->path[i].lon;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    update();
+    if (map)
+        map->update();
+}
+
+void EditorCanvas::drawScaleGizmo(QPainter& painter, const QPointF& canvasPos) const
+{
+    constexpr int kSize = 28;
+
+    painter.save();
+
+    QPen outerPen(QColor(0, 200, 255));
+    outerPen.setWidth(2);
+    outerPen.setStyle(Qt::DashLine);
+    painter.setPen(outerPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(canvasPos.x() - kSize, canvasPos.y() - kSize,
+                            kSize * 2, kSize * 2));
+
+    painter.setBrush(QColor(0, 200, 255));
+    painter.setPen(Qt::NoPen);
+    const int h = 6;
+    painter.drawRect(QRectF(canvasPos.x() - kSize - h/2, canvasPos.y() - kSize - h/2, h, h));
+    painter.drawRect(QRectF(canvasPos.x() + kSize - h/2, canvasPos.y() - kSize - h/2, h, h));
+    painter.drawRect(QRectF(canvasPos.x() - kSize - h/2, canvasPos.y() + kSize - h/2, h, h));
+    painter.drawRect(QRectF(canvasPos.x() + kSize - h/2, canvasPos.y() + kSize - h/2, h, h));
+
+    QPen crossPen(QColor(0, 200, 255, 180));
+    crossPen.setWidth(1);
+    painter.setPen(crossPen);
+    painter.drawLine(canvasPos + QPointF(-8, 0), canvasPos + QPointF(8, 0));
+    painter.drawLine(canvasPos + QPointF(0, -8), canvasPos + QPointF(0, 8));
+
+    painter.restore();
 }

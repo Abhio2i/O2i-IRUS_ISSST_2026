@@ -8,6 +8,7 @@ namespace ECS {
 struct radioComponent{
     int radios[100];
     uint16_t activeCount;
+    uint8_t jamHidden = 0;
 };
 #pragma pack(pop)
 

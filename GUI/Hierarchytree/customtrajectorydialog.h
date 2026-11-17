@@ -43,6 +43,21 @@
 #include <QGroupBox>
 #include <QCheckBox>
 #include <QPushButton>
+//arti deafult pattern
+struct TrajectoryConfig {
+    int    waypoints = 9;                          // [NEW] No. of Waypoints
+    int    shapeIndex = 0;                         // [NEW] Shape combo ka index
+    double length = 100, radius = 100;             // [NEW] Line length / Circle radius (km)
+    double majorAxis = 10, minorAxis = 5;          // [NEW] Oval/Ellipse axes (km)
+    int    orientationIndex = 0;                   // [NEW] Horizontal / Vertical
+    int    startPointIndex = 0;                    // [NEW] center / initial
+    int    circlePointIndex = 0;                   // [NEW] Clockwise / Anti-clockwise
+    bool   speedEnabled = true;                    // [NEW] Enable Speed Control
+    bool   altitudeEnabled = true;                 // [NEW] Enable Altitude Control
+    double minSpeed = 800, maxSpeed = 2500;        // [NEW] Start / End speed (km/h)
+    double minAltitude = 1000, maxAltitude = 10000;// [NEW] Start / End altitude (ft)
+};
+// end
 class CustomTrajectoryDialog : public QDialog
 {
     Q_OBJECT
@@ -65,7 +80,10 @@ public:
     QString getCurveType() const;
     bool isAltitudeEnabled() const;
     bool isSpeedEnabled() const;
-
+    // arti  new start
+    TrajectoryConfig snapshot() const;             // [NEW] dialog ki current values -> struct
+    void restore(const TrajectoryConfig &c);       // [NEW] struct -> dialog ki values
+   // End
 private slots:
     void onShapeChanged(int index);
     void onSpeedCheckboxChanged(int state);

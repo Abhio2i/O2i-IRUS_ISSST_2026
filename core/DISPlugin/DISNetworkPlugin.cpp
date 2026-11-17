@@ -1021,11 +1021,11 @@ void DISNetworkPlugin::onMissileDetonated(const QString& weaponID,
     if (it != m_hierarchy->Entities.end()) {
         Weapon* weapon = dynamic_cast<Weapon*>(it->second);
         if (weapon) {
-            snap.blastRadius = weapon->blastRadius;
-            if (weapon->parentEntity)
-                snap.firingEntityID = weapon->parentEntity->ID;
-            if (weapon->m_targetplatform)
-                snap.targetEntityID = weapon->m_targetplatform->ID;
+            // snap.blastRadius = weapon->blastRadius;
+            // if (weapon->parentEntity)
+            //     snap.firingEntityID = weapon->parentEntity->ID;
+            // if (weapon->m_targetplatform)
+            //     snap.targetEntityID = weapon->m_targetplatform->ID;
 
             // Determine result
             snap.detonationResult =

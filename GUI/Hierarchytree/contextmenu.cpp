@@ -1,7 +1,7 @@
 #include "contextmenu.h"
 #include "contextmenu-styles.h"
-#include "GUI/Hierarchytree/additemdialog.h"
-#include "GUI/Hierarchytree/addweapondialog.h"
+#include "GUI/Hierarchytree/additemdialog/additemdialog.h"
+#include "GUI/Hierarchytree/additemdialog/addweapondialog.h"
 #include "core/Hierarchy/hierarchy.h"
 #include "qapplication.h"
 #include "qprogressdialog.h"
@@ -303,47 +303,24 @@ void ContextMenu::setupProfileMenu(const QVariantMap &data)
         }
 
         // ── Weapon Profile ───────────────────────────────────────────
-        if (isWeaponProfile) {
-            if (!correctHierarchy) { QMessageBox::critical(this, "Error", "Hierarchy not available"); return; }
-            Hierarchy* dbHierarchy = mainWindow ? mainWindow->getDatabaseHierarchy() : nullptr;
 
-            bool isDbContext = (editorContext == kDatabaseCtx);
-            AddWeaponDialog dlg(parentWidget(), dbHierarchy, isDbContext);
-            dlg.setStyleSheet(ContextMenuStyles::AddItemDialog);
-            if (dlg.exec() != QDialog::Accepted) return;
-            if (dlg.weaponName().trimmed().isEmpty()) {
-                QMessageBox::warning(this, "Validation Error", "Weapon name cannot be empty");
-                return;
-            }
-            if (!isDbContext && dlg.selectedEntityId().isEmpty()) {
-                QMessageBox::warning(this, "Validation Error", "Please select a weapon from the database");
-                return;
-            }
 
-            try {
-                Weapon* weapon = buildWeaponFromDialog(dlg, correctHierarchy, dbHierarchy, ID, !isDbContext);
-                if (!weapon) {
-                    QMessageBox::critical(this, "Error", "Failed to build weapon from dialog input");
-                    return;
-                }
-                auto profIt = correctHierarchy->ProfileCategories.find(ID.toStdString());
-                if (profIt == correctHierarchy->ProfileCategories.end() || !profIt->second) {
-                    QMessageBox::critical(this, "Error", "Weapon profile not found in hierarchy");
-                    delete weapon;
-                    return;
-                }
-
-                profIt->second->addEntityWithObject(weapon);
-                weapon->syncComponentsFromWeaponData();
-            } catch (const std::exception& e) {
-                QMessageBox::critical(this, "Error", QString("Failed to create weapon: %1").arg(e.what()));
-            }
-            return;
-        }
+        // ── Weapon Profile ───────────────────────────────────────────
 
         // ── All Other Profiles ───────────────────────────────────────
+        // Search list DB hierarchy se populate honi chahiye (weapon ke liye bhi)
+        Hierarchy* dialogHierarchy = correctHierarchy;
+        if (isWeaponProfile && mainWindow) {
+            if (Hierarchy* dbH = mainWindow->getDatabaseHierarchy())
+                dialogHierarchy = dbH;
+        }
+        // ── All Other Profiles ───────────────────────────────────────
+
         AddItemDialog dialog(AddItemDialog::EntityType, specificType,
-                             AddItemDialog::NormalMode, correctHierarchy, this, editorContext);
+                             AddItemDialog::NormalMode, dialogHierarchy, this, editorContext);
+
+
+
         dialog.setStyleSheet(ContextMenuStyles::AddItemDialog);
         dialog.setWindowTitle(specificTypeNames.contains(lowerType)
                                   ? "Add " + specificTypeNames[lowerType]
@@ -356,6 +333,30 @@ void ContextMenu::setupProfileMenu(const QVariantMap &data)
                 return;
             }
 
+            if (isWeaponProfile) {
+                const bool isDb = (editorContext == kDatabaseCtx);
+                QString selected = dialog.getWeaponType();
+                if (!isDb && !dialog.getSelectedEntityId().isEmpty() && dialogHierarchy) {
+                    auto wit = dialogHierarchy->Weapons.find(dialog.getSelectedEntityId().toStdString());
+                    if (wit != dialogHierarchy->Weapons.end() && wit->second)
+                        selected = wit->second->weaponTypeName();
+                }
+                const QString baseName = dialog.getName();
+                const int count = dialog.getNumber();
+                for (int i = 0; i < count; ++i) {
+                    const QString nm = (count == 1) ? baseName
+                                                    : QString("%1-%2").arg(baseName).arg(i + 1);
+                    const QString finalName = isDb ? nm + selected : nm;
+                    emit addEntityRequested(ID, finalName, isProfileParent,
+                                            dialog.getComponents(), &dialog, selected);
+                }
+                return;
+            }
+            int totalCount = 0;
+            for (int s = 0; s < dialog.selectionCount(); ++s) {
+                dialog.activateSelection(s);
+                totalCount += dialog.getNumber();
+            }
             QString progressText = specificTypeNames.contains(lowerType)
                                        ? "Adding " + specificTypeNames[lowerType] + "s..."
                                        : "Adding Entities...";
@@ -369,14 +370,21 @@ void ContextMenu::setupProfileMenu(const QVariantMap &data)
             progressDialog.move(this->parentWidget()->mapToGlobal(
                                     this->parentWidget()->rect().center()) - progressDialog.rect().center());
             QApplication::processEvents();
-            QString baseName = dialog.getName();
-            int count = dialog.getNumber();
-            for (int i = 0; i < count; ++i) {
-                if (progressDialog.wasCanceled()) break;
-                QString entityName = (count == 1) ? baseName : QString("%1-%2").arg(baseName).arg(i + 1);
-                emit addEntityRequested(ID, entityName, isProfileParent, dialog.getComponents(), &dialog);
-                progressDialog.setValue(i + 1);
-                QApplication::processEvents();
+
+            int done = 0;
+            bool canceled = false;
+            for (int s = 0; s < dialog.selectionCount() && !canceled; ++s) {
+                dialog.activateSelection(s);
+
+                QString baseName = dialog.getName();
+                int count = dialog.getNumber();
+                for (int i = 0; i < count; ++i) {
+                    if (progressDialog.wasCanceled()) { canceled = true; break; }
+                    QString entityName = (count == 1) ? baseName : QString("%1-%2").arg(baseName).arg(i + 1);
+                    emit addEntityRequested(ID, entityName, isProfileParent, dialog.getComponents(), &dialog);
+                    progressDialog.setValue(++done);
+                    QApplication::processEvents();
+                }
             }
             progressDialog.close();
         }
@@ -395,7 +403,6 @@ void ContextMenu::setupFolderMenu(const QVariantMap &data)
     QString parentID = data["parentId"].toString();
     QString name     = data["name"].toString();
 
-    // FIX (#6): now uses the shared helper instead of an inline tree-walk.
     QString parentProfileType = findParentProfileType(parentID);
 
     QMap<QString, QString> profileLabelMap;
@@ -449,42 +456,48 @@ void ContextMenu::setupFolderMenu(const QVariantMap &data)
                 return;
             }
         }
-        if (isWeaponProfile) {
-            MainWindow* mainWindow = MainWindow::instance();
-            Hierarchy* dbHierarchy = mainWindow ? mainWindow->getDatabaseHierarchy() : nullptr;
-            bool isDbContext = (editorContext == kDatabaseCtx);
 
-            AddWeaponDialog dlg(parentWidget(), dbHierarchy, isDbContext);
-            dlg.setStyleSheet(ContextMenuStyles::AddItemDialog);
-            if (dlg.exec() != QDialog::Accepted) return;
-            if (dlg.weaponName().trimmed().isEmpty()) return;
-            Weapon* weapon = buildWeaponFromDialog(dlg, correctHierarchy, dbHierarchy, ID, !isDbContext);
-            if (!weapon) return;
-            auto folderIt = correctHierarchy->Folders.find(ID.toStdString());
-            if (folderIt == correctHierarchy->Folders.end() || !folderIt->second) {
-                QMessageBox::critical(this, "Error", "Target folder not found in hierarchy");
-                delete weapon;
-                return;
-            }
-            folderIt->second->addEntityWithObject(weapon);
-            weapon->syncComponentsFromWeaponData();
-            return;
-        }
 
         QString specificTypeForDialog = parentProfileType.isEmpty() ? "Platform" : parentProfileType;
+        Hierarchy* dialogHierarchy = correctHierarchy;
+        if (isWeaponProfile) {
+            if (MainWindow* mw = MainWindow::instance()) {
+                if (Hierarchy* dbH = mw->getDatabaseHierarchy())
+                    dialogHierarchy = dbH;
+            }
+        }
         AddItemDialog dialog(AddItemDialog::EntityType,
                              specificTypeForDialog,
                              AddItemDialog::NormalMode,
-                             correctHierarchy, this, editorContext);
+                             dialogHierarchy, this, editorContext);
         dialog.setStyleSheet(ContextMenuStyles::AddItemDialog);
         dialog.setWindowTitle(addEntityLabel);
-
         if (dialog.exec() == QDialog::Accepted && !dialog.getName().isEmpty()) {
-            QString baseName = dialog.getName();
-            int count = dialog.getNumber();
-            for (int i = 0; i < count; ++i) {
-                QString entityName = (count == 1) ? baseName : QString("%1-%2").arg(baseName).arg(i + 1);
-                emit addEntityRequested(ID, entityName, false, dialog.getComponents(), &dialog);
+
+            if (isWeaponProfile) {
+                QString selected = dialog.getWeaponType();
+                if (!dialog.getSelectedEntityId().isEmpty() && dialogHierarchy) {
+                    auto wit = dialogHierarchy->Weapons.find(dialog.getSelectedEntityId().toStdString());
+                    if (wit != dialogHierarchy->Weapons.end() && wit->second)
+                        selected = wit->second->weaponTypeName();
+                }
+                const QString baseName = dialog.getName();
+                const int count = dialog.getNumber();
+                for (int i = 0; i < count; ++i) {
+                    const QString nm = (count == 1) ? baseName
+                                                    : QString("%1-%2").arg(baseName).arg(i + 1);
+                    emit addEntityRequested(ID, nm, false, dialog.getComponents(), &dialog, selected);
+                }
+                return;
+            }
+            for (int s = 0; s < dialog.selectionCount(); ++s) {
+                dialog.activateSelection(s);
+                QString baseName = dialog.getName();
+                int count = dialog.getNumber();
+                for (int i = 0; i < count; ++i) {
+                    QString entityName = (count == 1) ? baseName : QString("%1-%2").arg(baseName).arg(i + 1);
+                    emit addEntityRequested(ID, entityName, false, dialog.getComponents(), &dialog);
+                }
             }
         }
     });
@@ -551,14 +564,14 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
         setInactive = addAction(QIcon(":/icons/images/disable.png"), "Set Inactive");
 
         addComponentMenu = addMenu(QIcon(":/icons/images/add.png"), "Add");
-        addComponentMenu->setStyleSheet(styleSheet());
+        addComponentMenu->setStyleSheet(ContextMenuStyles::ContextMenu);
         addWeapon = addComponentMenu->addAction(QIcon(":/icons/images/bio-weapon.png"),      "Add Weapon");
         addSensor = addComponentMenu->addAction(QIcon(":/icons/images/database (1).png"),    "Add Sensor");
         addIFF    = addComponentMenu->addAction(QIcon(":/icons/images/identification.png"),  "Add IFF");
         addRadio  = addComponentMenu->addAction(QIcon(":/icons/images/radio.png"),           "Add Radio");
 
         QMenu *setTeamMenu = addMenu(QIcon(":/icons/images/seteam.png"), "Set Team");
-        setTeamMenu->setStyleSheet(styleSheet());
+        setTeamMenu->setStyleSheet(ContextMenuStyles::ContextMenu);
         const QStringList teams = {"RedTeam", "BlueTeam", "GreenTeam", "YellowTeam",
                                    "GreyTeam", "AlphaTeam", "BetaTeam", "GammaTeam"};
         for (const QString& team : teams) {
@@ -569,7 +582,7 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
         }
         if (getCurrentEditorContext() == kDatabaseCtx) {
             QMenu *setCategoryMenu = addMenu(QIcon(":/icons/images/set.png"), "Set Category");
-            setCategoryMenu->setStyleSheet(styleSheet());
+            setCategoryMenu->setStyleSheet(ContextMenuStyles::ContextMenu);
 
             QMap<QString, QStringList> categoryMap = {
                 {"Air",    QStringList{"Aircraft", "Helicopter", "UAV", "FighterAircraft", "TransportAircraft"}},
@@ -582,7 +595,7 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
                 const QStringList subCats = it.value();
 
                 QMenu* subCatMenu = setCategoryMenu->addMenu(category);
-                subCatMenu->setStyleSheet(styleSheet());
+                subCatMenu->setStyleSheet(ContextMenuStyles::ContextMenu);
 
                 for (const QString& subCat : subCats) {
                     const QString subCategory = subCat;
@@ -605,7 +618,6 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
     }
 
     QAction *deleteEntity = addAction(QIcon(":/icons/images/delete.png"), "Delete");
-
     connect(rename, &QAction::triggered, this, [=]() {
         QInputDialog dialog(this);
         makeDialogResizable(&dialog);
@@ -645,7 +657,6 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
         connect(addIFF,      &QAction::triggered, this, [=]() { emit addIFFToEntityRequested(data); });
         connect(addRadio,    &QAction::triggered, this, [=]() { emit addRadioToEntityRequested(data); });
     }
-    // --- Leave Formation (ally only; mothership par mat dikhao) ---
     if (m_hierarchy && isPlatformEntity && getCurrentEditorContext() != kDatabaseCtx) {
         Platform* pl = nullptr;
         auto eit = m_hierarchy->Entities.find(ID.toStdString());
@@ -656,7 +667,6 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
         if (pl)
             parentForm = pl->dynamicModel.formation;
 
-        // Fallback: scan formations agar pointer null ho
         if (!parentForm) {
             for (const auto& pair : m_hierarchy->Entities) {
                 Formation* f = dynamic_cast<Formation*>(pair.second);
@@ -678,24 +688,19 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
             });
         }
     }
-    // Formation actions —
     if (m_hierarchy) {
         auto it = m_hierarchy->Entities.find(ID.toStdString());
         if (it != m_hierarchy->Entities.end()) {
             Formation* formation = dynamic_cast<Formation*>(it->second);
             if (formation) {
                 QString editorCtx = getCurrentEditorContext();
-
-                // Database Editor mein dono actions hide
                 if (editorCtx != "database") {
                     addSeparator();
-
                     QAction* selectWithEntityAction = addAction(
                             QIcon(":/icons/images/selection.png"),"Select with Entity");
                     connect(selectWithEntityAction, &QAction::triggered, this, [this, ID]() {
                         emit selectFormationWithEntityRequested(ID);
                     });
-
                     QAction* changeMotherAction = addAction(
                         QIcon(":/icons/images/edit.png"), "Change Mothership");
                     connect(changeMotherAction, &QAction::triggered, this, [this, ID]() {
@@ -715,7 +720,6 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
                             emit breakFormationRequested(ID);
                         });
                     } else {
-                        // Sirf tab dikhao jab slots mein entities assigned hain
                         bool hasMembers = false;
                         if (formation->formationPositions) {
                             for (const auto& pair : *formation->formationPositions) {
@@ -736,7 +740,7 @@ void ContextMenu::setupEntityMenu(const QVariantMap &data)
         }
     }
 }
-    }
+}
 }
 void ContextMenu::setupComponentMenu(const QVariantMap &data)
 {
@@ -747,42 +751,44 @@ void ContextMenu::setupComponentMenu(const QVariantMap &data)
     if (name.toLower() == "weapons") {
         QAction *addWeaponAction = addAction("Add");
         connect(addWeaponAction, &QAction::triggered, this, [=]() {
-            MainWindow* mainWindow = MainWindow::instance();
-            Hierarchy* correctHierarchy = nullptr;
-            if (mainWindow) {
-                QWidget *cur = mainWindow->stackedWidget->currentWidget();
-                if (cur == mainWindow->databaseEditor)
-                    correctHierarchy = mainWindow->getDatabaseHierarchy();
-                else if (cur == mainWindow->scenarioEditor && mainWindow->scenarioEditor)
-                    correctHierarchy = mainWindow->scenarioEditor->hierarchy;
-                else if (cur == mainWindow->runtimeEditor && mainWindow->runtimeEditor)
-                    correctHierarchy = mainWindow->runtimeEditor->hierarchy;
-            }
-            if (!correctHierarchy) return;
-            Hierarchy* dbHierarchy = mainWindow ? mainWindow->getDatabaseHierarchy() : nullptr;
-            AddWeaponDialog dlg(parentWidget(), dbHierarchy, true);
-            dlg.setStyleSheet(ContextMenuStyles::AddItemDialog);
-            if (dlg.exec() != QDialog::Accepted) return;
-            QString weaponName = dlg.weaponName().trimmed();
-            if (weaponName.isEmpty()) return;
-            emit addComponentRequested(parentID, "weapons", weaponName, dlg.weaponTypeStr(), "");
-            if (correctHierarchy->Entities.count(parentID.toStdString())) {
-                Entity* ent = (correctHierarchy->Entities)[parentID.toStdString()];
-                Platform* plf = dynamic_cast<Platform*>(ent);
-                if (plf /*&& plf->weapons*/) {
-                    for (auto& [wid, w] : *plf->weapons.weapons) {
-                        if (QString::fromStdString(w->Name) == weaponName) {
-                            QJsonObject cfg = dlg.configJson();
-                            cfg["weaponTypeName"] = dlg.weaponTypeStr();
-                            w->fromJson(cfg);
-                            w->Name = weaponName.toStdString();
-                            w->syncComponentsFromWeaponData();
-                            plf->weapons.updateSubComponent(wid, w->toJson());
-                            break;
-                        }
-                    }
+            const QString editorContext = getCurrentEditorContext();
+            MainWindow* mw = MainWindow::instance();
+            if (!mw) return;
+
+            if (editorContext == kScenarioCtx || editorContext == kRuntimeCtx) {
+                Hierarchy* targetHier = nullptr;
+                if (editorContext == kScenarioCtx && mw->scenarioEditor)
+                    targetHier = mw->scenarioEditor->hierarchy;
+                else if (editorContext == kRuntimeCtx && mw->runtimeEditor)
+                    targetHier = mw->runtimeEditor->hierarchy;
+                if (targetHier
+                    && !HierarchyConnector::instance()->confirmAndLoadAssociatedDatabase(targetHier, this)) {
+                    return;
                 }
             }
+
+            Hierarchy* dbHierarchy = mw->getDatabaseHierarchy();
+            if (!dbHierarchy) return;
+
+            // Weapon profile wala same dialog
+            AddItemDialog dialog(AddItemDialog::EntityType, "Weapon",
+                                 AddItemDialog::NormalMode,
+                                 dbHierarchy, this, editorContext);
+            dialog.setStyleSheet(ContextMenuStyles::AddItemDialog);
+            dialog.setWindowTitle("Add Weapon");
+            if (dialog.exec() != QDialog::Accepted || dialog.getName().isEmpty()) return;
+
+            const bool isDb = (editorContext == kDatabaseCtx);
+            QString weaponType = dialog.getWeaponType();
+            QString selectedId = dialog.getSelectedEntityId();
+            if (!isDb) {
+                if (selectedId.isEmpty()) return;
+                auto wit = dbHierarchy->Weapons.find(selectedId.toStdString());
+                if (wit == dbHierarchy->Weapons.end() || !wit->second) return;
+                weaponType = wit->second->weaponTypeName();
+            }
+            emit addComponentRequested(parentID, "weapons", dialog.getName(),
+                                       weaponType, isDb ? QString() : selectedId);
         });
         return;
     }

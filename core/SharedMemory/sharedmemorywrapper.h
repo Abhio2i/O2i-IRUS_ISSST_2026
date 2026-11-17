@@ -26,8 +26,9 @@
 #include "core/Hierarchy/EntityProfiles/specialzone.h"
 #include "core/Hierarchy/entity.h"
 #include "qobject.h"
-#include "sharedMemory.h"
-
+#include "sharedMemorylib/sharedMemory.h"
+#include <string>
+#include <unordered_map>
 // =============================================================================
 // STRUCT: SharedComponent
 // DESCRIPTION: Aggregates pointers to various entity components for transfer
@@ -74,6 +75,22 @@ private:
     void updateSensorData(SharedComponent comp, SharedStructs::Entity* entity);
     void updateRadioData(SharedComponent comp, SharedStructs::Entity* entity);
     void updateTrajectoryData(SharedComponent comp, SharedStructs::Entity* entity);
+
+    void updateAESAData(SharedComponent comp, SharedStructs::Entity* entity);
+    bool aesaAcceleration(const std::string& key, const double v[3],
+                          int hitCount, bool validated, double now, double a[3]);
+
+    struct AesaAccelState {
+        double v[3] = {0.0, 0.0, 0.0};
+        double a[3] = {0.0, 0.0, 0.0};
+        double t = 0.0, lastSeen = 0.0;
+        int    hits = -1;
+        int    updates = 0;
+        bool   hasV = false;
+    };
+    std::unordered_map<std::string, AesaAccelState> aesaAccel_;
+    std::unordered_map<uint32_t, std::string>      radarIdToEntity_;
+    double aesaClock_ = 0.0;
 
 private:
     EntityHandler* handler;                                     //!< Entity handler (unclear, likely from sharedMemory.h)

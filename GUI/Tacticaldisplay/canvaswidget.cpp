@@ -1,6 +1,6 @@
 #include <QElapsedTimer>
 #include "canvaswidget.h"
-#include "GUI/Hierarchytree/additemdialog.h"
+#include "GUI/Hierarchytree/additemdialog/additemdialog.h"
 #include "GUI/Hierarchytree/contextmenu.h"
 #include "qapplication.h"
 #include "qjsondocument.h"
@@ -3539,16 +3539,58 @@ void CanvasWidget::drawRadar(QPainter& painter, std::string id, MeshEntry entry)
     }
 }
 
+// void CanvasWidget::drawRadio(QPainter& painter, std::string id, MeshEntry entry) {
+//     Platform* entity = entry.platform;
+//     if(!entry.radioVisible) return;
+//     if (!entity) return;
+//     // if (!entity->radios) return;
+
+//     for (auto const& pair : entity->radios.radios) {
+//         Radio* s = pair.second;
+//         QPointF point = gislib->geoToCanvas(entry.coreTransform->getLatitude(), entry.coreTransform->getLongitude());
+
+//         float centerX = point.x();
+//         float centerY = point.y();
+//         QString  msg = QString::fromStdString(s->msg);
+//         if(!msg.isEmpty()){
+//             QFont font("Arial", 10, QFont::Bold);
+//             painter.setFont(font);
+//             painter.setPen(QColor(0, 255, 0, 255));
+//             // Fixed screen coordinates ka upyog karein
+//             painter.drawText(QPointF(centerX, centerY),msg);
+//         }
+
+//         QPen pen(Qt::black, 1);
+//         QVector<qreal> dashes;
+//         dashes << 4 << 10;
+//         pen.setDashPattern(dashes);
+//         painter.setPen(pen);
+
+//         for (int i = 0; i < s->targets.size(); ++i) {
+//             try {
+//                 if(s->targets[i].entity /*&& s->targets[i].entity->transform*/){
+//                     QPointF points2 = gislib->geoToCanvas(s->targets[i].entity->transform.getLatitude(), s->targets[i].entity->transform.getLongitude());
+//                     painter.drawLine(centerX, centerY, points2.x(), points2.y());
+//                 }
+//             }catch(...){
+
+//             }
+//         }
+//     }
+// }
+
+
+
 void CanvasWidget::drawRadio(QPainter& painter, std::string id, MeshEntry entry) {
     Platform* entity = entry.platform;
     if(!entry.radioVisible) return;
     if (!entity) return;
-    // if (!entity->radios) return;
 
     for (auto const& pair : entity->radios.radios) {
         Radio* s = pair.second;
-        QPointF point = gislib->geoToCanvas(entry.coreTransform->getLatitude(), entry.coreTransform->getLongitude());
+        if (!s || s->isDisplaySuppressed()) continue;      // NEW: jammed radio is not shown
 
+        QPointF point = gislib->geoToCanvas(entry.coreTransform->getLatitude(), entry.coreTransform->getLongitude());
         float centerX = point.x();
         float centerY = point.y();
         QString  msg = QString::fromStdString(s->msg);
@@ -3556,7 +3598,6 @@ void CanvasWidget::drawRadio(QPainter& painter, std::string id, MeshEntry entry)
             QFont font("Arial", 10, QFont::Bold);
             painter.setFont(font);
             painter.setPen(QColor(0, 255, 0, 255));
-            // Fixed screen coordinates ka upyog karein
             painter.drawText(QPointF(centerX, centerY),msg);
         }
 
@@ -3568,16 +3609,16 @@ void CanvasWidget::drawRadio(QPainter& painter, std::string id, MeshEntry entry)
 
         for (int i = 0; i < s->targets.size(); ++i) {
             try {
-                if(s->targets[i].entity /*&& s->targets[i].entity->transform*/){
+                if(s->targets[i].entity && !allRadiosDisplaySuppressed(s->targets[i].entity)){   // NEW
                     QPointF points2 = gislib->geoToCanvas(s->targets[i].entity->transform.getLatitude(), s->targets[i].entity->transform.getLongitude());
                     painter.drawLine(centerX, centerY, points2.x(), points2.y());
                 }
-            }catch(...){
-
-            }
+            }catch(...){ }
         }
     }
 }
+
+
 
 void CanvasWidget::drawImage(QPainter& painter, std::string id, MeshEntry entry) {
     if (!showImage) return;

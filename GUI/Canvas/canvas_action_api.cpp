@@ -1,7 +1,9 @@
 #include "canvas_action_api.h"
 #include "overlay_canvas.h"
 #include "map_widget.h"
-#include "GUI/Hierarchytree/additemdialog.h"
+
+
+#include "GUI/Hierarchytree/additemdialog/additemdialog.h"
 #include "GUI/Hierarchytree/contextmenu.h"
 #include "GUI/Hierarchytree/hierarchytree.h"
 #include "GUI/Editors/runtimeeditor.h"
@@ -54,6 +56,9 @@ void CanvasActionApi::registerDefaultActions()
             HierarchyTree* treeView = se ? se->treeView : re->treeView;
             if (!library || !hierarchy || !treeView || !treeView->getContextMenu())
                 return;
+            QWidget* parentW = ctx.parent ? ctx.parent : ctx.canvas;
+            if (!HierarchyConnector::instance()->confirmAndLoadAssociatedDatabase(hierarchy, parentW))
+                return;
             AddItemDialog dialog(AddItemDialog::EntityType,
                                  "Platform",
                                  AddItemDialog::NormalMode,
@@ -61,14 +66,31 @@ void CanvasActionApi::registerDefaultActions()
                                  ctx.parent ? ctx.parent : ctx.canvas,
                                  se ? QStringLiteral("scenario") : QStringLiteral("runtime"));
             dialog.setWindowTitle("Add Entity");
+
             if (dialog.exec() != QDialog::Accepted || dialog.getName().isEmpty())
                 return;
+
             const bool isProfileParent = true;
+            ProfileCategaory* profile = hierarchy->getProfileByName("Platform");
+            const QString parentId = profile
+                                         ? QString::fromStdString(profile->ID)
+                                         : QString();
+
+            const double initLat = ctx.geoPos.y();
+            const double initLon = ctx.geoPos.x();
+            int totalCount = 0;
+            for (int s = 0; s < dialog.selectionCount(); ++s) {
+                dialog.activateSelection(s);
+                totalCount += dialog.getNumber();
+            }
+            if (totalCount <= 0)
+                totalCount = 1;
+
             QProgressDialog progressDialog(
                 QStringLiteral("Adding Entities..."),
                 QStringLiteral("Cancel"),
                 0,
-                dialog.getNumber(),
+                totalCount,
                 ctx.parent ? ctx.parent : ctx.canvas);
             progressDialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
             progressDialog.setWindowModality(Qt::WindowModal);
@@ -76,41 +98,44 @@ void CanvasActionApi::registerDefaultActions()
             progressDialog.setValue(0);
             progressDialog.show();
             QApplication::processEvents();
-            ProfileCategaory* profile = hierarchy->getProfileByName("Platform");
-            const QString parentId = profile
-                                         ? QString::fromStdString(profile->ID)
-                                         : QString();
 
-            double initLat = 190.0;
-            double initLon = 0.0;
-            if (!dialog.isScenarioconfigEnabled()) {
-                initLat = ctx.geoPos.y();
-                initLon = ctx.geoPos.x();
-            }
-            const QString baseName = dialog.getName();
-            const int count = dialog.getNumber();
             ContextMenu* ctxMenu = treeView->getContextMenu();
-            for (int i = 0; i < count; ++i) {
-                if (progressDialog.wasCanceled())
-                    break;
-                const QString entityName =
-                    (count == 1) ? baseName
-                                 : QString("%1-%2").arg(baseName).arg(i + 1);
-                emit ctxMenu->addEntityRequested(
-                    parentId,
-                    entityName,
-                    isProfileParent,
-                    dialog.getComponents(),
-                    &dialog,
-                    QString(),
-                    initLat,
-                    initLon,
-                    0.0f
-                    );
-                progressDialog.setValue(i + 1);
-                QApplication::processEvents();
+            int done = 0;
+            bool canceled = false;
+
+            for (int s = 0; s < dialog.selectionCount() && !canceled; ++s) {
+                dialog.activateSelection(s);
+
+                const QString baseName = dialog.getName();
+                const int count = dialog.getNumber();
+
+                for (int i = 0; i < count; ++i) {
+                    if (progressDialog.wasCanceled()) {
+                        canceled = true;
+                        break;
+                    }
+                    const QString entityName =
+                        (count == 1) ? baseName
+                                     : QString("%1-%2").arg(baseName).arg(i + 1);
+
+                    emit ctxMenu->addEntityRequested(
+                        parentId,
+                        entityName,
+                        isProfileParent,
+                        dialog.getComponents(),
+                        &dialog,
+                        QString(),
+                        initLat,
+                        initLon,
+                        0.0f
+                        );
+
+                    progressDialog.setValue(++done);
+                    QApplication::processEvents();
+                }
             }
             progressDialog.close();
+
         }
     });
 
@@ -136,6 +161,7 @@ void CanvasActionApi::registerDefaultActions()
     //     }
     // });
 }
+
 bool CanvasActionApi::registerAction(const CanvasActionDescriptor& desc)
 {
     if (desc.id.isEmpty() || !desc.callback) {
@@ -186,3 +212,4 @@ bool CanvasActionApi::trigger(const QString& id, const CanvasActionContext& ctx)
     d.callback(ctx);
     return true;
 }
+

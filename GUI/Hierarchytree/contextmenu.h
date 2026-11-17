@@ -42,7 +42,7 @@
 #include <QTreeWidgetItem>                    // For tree item handling
 #include <QVariantMap>                        // For data storage and transfer
 #include <QList>                              // For list of items
-#include "GUI/Hierarchytree/additemdialog.h"  // For add item dialog integration
+#include "GUI/Hierarchytree/additemdialog/additemdialog.h"
 
 // Forward declarations
 class Hierarchy;
@@ -88,7 +88,7 @@ signals:
                             bool isProfileParent,
                             QVariantMap components = QVariantMap(),
                             AddItemDialog* dialog = nullptr,
-                            QString sensorType = "Generic",
+                            QString sensorType = "",
                             double initLat = 20000,
                             double initlon = 20000,
                             float heading = 20000);

@@ -47,11 +47,13 @@ public:
     // SECTION: Version Information
     // DESCRIPTION: Software and file format version strings.
     // =========================================================================
-    static inline QString software_version = "7.0.2"; //!< Current software version
+    static inline QString software_version = "7.0.47"; //!< Current software version
     static inline QString file_Version = "";           //!< Loaded file version (if any)
 
     void toJson();      //!< Serialises configuration to JSON
     void fromJson();    //!< Deserialises configuration from JSON
+
+    static inline bool sharedData = false;
 
     // =========================================================================
     // SECTION: Recent Projects Management

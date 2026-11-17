@@ -1508,8 +1508,17 @@ bool RadarModel_AESA::processTargetDetection(
     }
     else
     {
-        effRCS = signal_->computeEffectiveRCS(target, range,
-                                              config_.frequency_Hz);
+        // Mean RCS: same model with Swerling disabled (no random draw).
+        TargetInput meanTarget   = target;
+        meanTarget.swerlingCase  = SwerlingCase::CASE_0;
+        meanRcs = signal_->computeEffectiveRCS(meanTarget, range,
+                                               config_.frequency_Hz);
+
+        // Apply the target's Swerling fluctuation once, as before. REQ-AESA-040.
+        const bool coherent = (target.swerlingCase == SwerlingCase::CASE_II ||
+                               target.swerlingCase == SwerlingCase::CASE_IV);
+        effRCS = signal_->computeSwerlingRCS(meanRcs, target.swerlingCase,
+                                             coherent);
     }
 
     // Two-ray multipath factor — applies constructive/destructive interference
@@ -1601,7 +1610,7 @@ bool RadarModel_AESA::processTargetDetection(
     // =========================================================================
     DetectionOutput det;
     det.targetID       = target.id;
-
+    det.rcs_m2         = meanRcs;
     // Apply measurement noise to azimuth and elevation. REQ-AESA-040.
     det.azimuth        = sAz  + azNoise(tl_rng);
     det.elevation      = sEl  + elNoise(tl_rng);

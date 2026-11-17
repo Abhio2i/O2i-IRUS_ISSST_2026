@@ -47,7 +47,22 @@ bool LayerApi::deleteLayer(const QString& id) {
     QStringList shapes = LayerManager::instance()->getShapesInLayer(id);
     for (const QString& sid : shapes)
         ShapeApi::instance()->deleteShape(sid);
-    return LayerManager::instance()->deleteLayer(id);
+    const bool ok = LayerManager::instance()->deleteLayer(id);
+    if (ok)
+        forgetImportedPathForLayer(id);
+    return ok;
+}
+
+void LayerApi::forgetImportedPathForLayer(const QString& layerId)
+{
+    if (layerId.isEmpty())
+        return;
+    for (auto it = m_importedPathToLayerId.begin(); it != m_importedPathToLayerId.end(); ) {
+        if (it.value() == layerId)
+            it = m_importedPathToLayerId.erase(it);
+        else
+            ++it;
+    }
 }
 
 bool LayerApi::renameLayer(const QString& id, const QString& newName) {
@@ -177,16 +192,29 @@ bool LayerApi::importLayer(const QString& filePath,
         return false;
     }
 
-    static QSet<QString> s_importedPaths;
     const QString absPath = QFileInfo(filePath).absoluteFilePath();
-    if (s_importedPaths.contains(absPath)) {
-        qWarning() << "Layer already exists (same file):" << absPath;
-        return false;
+
+    // Same file: block only if that import's layer still exists
+    if (m_importedPathToLayerId.contains(absPath)) {
+        const QString existingLayerId = m_importedPathToLayerId.value(absPath);
+        if (LayerManager::instance()->layerExists(existingLayerId)) {
+            qWarning() << "Layer already exists (same file):" << absPath;
+            return false;
+        }
+        // Layer already deleted — stale entry clean
+        m_importedPathToLayerId.remove(absPath);
     }
 
     QString name = layerName.isEmpty()
                        ? QFileInfo(filePath).completeBaseName()
                        : layerName;
+    if (layerName.isEmpty() && fmt == QLatin1String("shapefile")) {
+        for (const QString& suf : {QStringLiteral("_points"),
+                                   QStringLiteral("_lines"),
+                                   QStringLiteral("_polygons")}) {
+            if (name.endsWith(suf)) { name.chop(suf.size()); break; }
+        }
+    }
 
     if (!LayerManager::instance()->findLayerIdByName(name).isEmpty()) {
         QString candidate = name + QLatin1Char('_')
@@ -248,9 +276,8 @@ bool LayerApi::importLayer(const QString& filePath,
         LayerManager::instance()->deleteLayer(newLayerId);
         return false;
     }
-
     LayerManager::instance()->setLayerEditable(newLayerId, false);
-    s_importedPaths.insert(absPath);
+    m_importedPathToLayerId.insert(absPath, newLayerId);
     return true;
 }
 

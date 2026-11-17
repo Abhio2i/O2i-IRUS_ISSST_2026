@@ -27,6 +27,8 @@ public:
     std::unordered_map<std::string, Platform*> m_Platforms;
     std::unordered_map<std::string, Specialzone*> m_Specialzones;
 
+    std::unordered_map<std::string, Entity::Category> IRDetectionCategory;
+
     Surrounding getSurrounding(float radius   = 10000.0,
                                float atmCoeff = 0.00001,  // %
                                float rainRate = 0.0,      // mm/h
@@ -76,6 +78,8 @@ public:
     void scan() override;
     QJsonObject toJson() const override;
     void fromJson(const QJsonObject& obj) override;
+
+    std::unordered_map<std::string, float> IRTargetTempC;
 
     /*---------------   Resolution Start   ------------------*/
     Resolutions currentResolution = Resolutions::FourK;

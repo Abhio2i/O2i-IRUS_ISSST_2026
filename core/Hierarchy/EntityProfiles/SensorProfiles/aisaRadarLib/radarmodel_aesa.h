@@ -1234,8 +1234,11 @@ struct DetectionOutput
     // true = target was in the Doppler blind zone this dwell. Detection
     // was achieved via HPRF or STAP — quality may be degraded. REQ-AESA-040.
     bool   inDopplerBlind  = false;
-};
 
+    // Mean (pre-Swerling) target RCS used for this detection (m^2).
+    // 0 = not available. REQ-AESA-040.
+    double rcs_m2          = 0.0;
+};
 // -----------------------------------------------------------------------------
 // TrackOutput: validated Kalman track state for one target.
 // Published by getValidatedTracks() and latestOutput_.tracks.
@@ -1310,6 +1313,9 @@ struct TrackOutput
 
     // Latest IFF interrogation result for this track. REQ-AESA-050.
     IFFResult iff;
+
+    // Mean RCS of the last associated detection (m^2). 0 = not available.
+    double rcs_m2 = 0.0;
 };
 
 // -----------------------------------------------------------------------------
@@ -1448,6 +1454,9 @@ struct TrackFile
     // Latest IFF result. Updated by queryIFF() each tick. REQ-AESA-050.
     IFFResult iff;
 
+
+    // Mean RCS of the last associated detection (m^2). 0 = not available.
+    double rcs_m2 = 0.0;
     // ---- Kalman filter matrices ---------------------------------------------
 
     // State vector [x, y, z, vx, vy, vz]. Units: metres, m/s. REQ-AESA-030.

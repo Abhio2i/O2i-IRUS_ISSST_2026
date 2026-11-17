@@ -9,7 +9,8 @@
  * DESCRIPTION:  Implements the ApplicationDialog class which provides a modal
  *               dialog for configuring application‑wide settings and parameters.
  *               Includes tabs for General (FPS limits, developer mode, image size),
- *               Database (enable/disable, path selection), and Physics (FPS).
+ *               Appearance (theme selection with live preview), Database
+ *               (enable/disable, path selection), and Physics (FPS).
  *               Settings are stored globally as static members and can be accessed
  *               from anywhere in the application. Supports validation of user
  *               input, signal emission on setting changes, and persistent storage
@@ -44,14 +45,19 @@
 #include <QThread>
 #include <QFileDialog>
 #include <QDir>
+#include <QAbstractButton>
+#include <QPainter>
+#include <QPainterPath>
 #include <Setup.h>
 #include "GUI/mainwindow.h"
 #include "GUI/dialogwindowutils.h"
+#include "GUI/Theme/theme.h"
 
 
 
 // %%% Static Member Initialization %%%
 bool    ApplicationDialog::s_developerMode  = false;
+bool    ApplicationDialog::s_sharedMode  = false;
 bool    ApplicationDialog::s_initialized    = false;
 bool    ApplicationDialog::s_databaseEnabled = false;
 QString ApplicationDialog::s_databasePath   = QString();
@@ -66,8 +72,123 @@ bool isConfigAvailable() {
 bool isMainThread() {
     return QThread::currentThread() == QCoreApplication::instance()->thread();
 }
-}
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ThemeCard — theme ka mini preview card (khud paint karta hai, stylesheet nahi)
+// Q_OBJECT ki zaroorat nahi: koi naya signal/slot nahi hai.
+// ─────────────────────────────────────────────────────────────────────────────
+class ThemeCard : public QAbstractButton
+{
+public:
+    explicit ThemeCard(const ThemeColors& theme, QWidget* parent = nullptr)
+        : QAbstractButton(parent), m_t(theme)
+    {
+        setCheckable(true);
+        setCursor(Qt::PointingHandCursor);
+        setFixedSize(124, 108);
+        setAttribute(Qt::WA_Hover);              // hover pe repaint
+        setToolTip(QString("%1 theme").arg(theme.displayName));
+        setFocusPolicy(Qt::TabFocus);
+    }
+
+    const QString& themeId() const { return m_t.id; }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+
+        const QColor accent(ThemeManager::instance().colors().accent);
+        const QColor bg(m_t.background);
+        const QColor sec(m_t.secondary);
+        const QColor txt(m_t.text);
+        const QColor txt2(m_t.textSecondary);
+        const bool   on = isChecked();
+
+        const QRectF pv(3, 3, width() - 6, 76);
+
+        // ── Mockup (rounded clip ke andar) ───────────────────────────────
+        QPainterPath clip;
+        clip.addRoundedRect(pv, 8, 8);
+        p.save();
+        p.setClipPath(clip);
+
+        p.fillRect(pv, bg);
+
+        // title bar + 3 dots
+        p.fillRect(QRectF(pv.left(), pv.top(), pv.width(), 14), sec);
+        p.setPen(Qt::NoPen);
+        for (int i = 0; i < 3; ++i) {
+            p.setBrush(i == 0 ? accent : txt2);
+            p.drawEllipse(QPointF(pv.left() + 9 + i * 8, pv.top() + 7), 2.0, 2.0);
+        }
+
+        // sidebar
+        p.fillRect(QRectF(pv.left(), pv.top() + 14, 26, pv.height() - 14), sec);
+        for (int i = 0; i < 3; ++i) {
+            p.setBrush(i == 0 ? accent : txt2);
+            p.drawRoundedRect(QRectF(pv.left() + 5, pv.top() + 22 + i * 10, 16, 4), 2, 2);
+        }
+
+        // content: heading + text lines + accent button
+        const qreal x0 = pv.left() + 34;
+        p.setBrush(txt);
+        p.drawRoundedRect(QRectF(x0, pv.top() + 22, 42, 5), 2.5, 2.5);
+        p.setBrush(txt2);
+        p.drawRoundedRect(QRectF(x0, pv.top() + 33, 54, 4), 2, 2);
+        p.drawRoundedRect(QRectF(x0, pv.top() + 41, 40, 4), 2, 2);
+        p.setBrush(accent);
+        p.drawRoundedRect(QRectF(x0, pv.bottom() - 17, 28, 9), 3, 3);
+
+        p.restore();
+
+        // ── Border ───────────────────────────────────────────────────────
+        QColor borderCol = on ? accent
+                              : (underMouse() ? accent.lighter(130) : QColor(m_t.border));
+        const qreal bw = on ? 2.5 : 1.0;
+        p.setPen(QPen(borderCol, bw));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(pv.adjusted(bw / 2, bw / 2, -bw / 2, -bw / 2), 8, 8);
+
+        // ── Selected badge (check mark) ──────────────────────────────────
+        if (on) {
+            const QPointF c(pv.right() - 12, pv.bottom() - 12);
+            p.setPen(Qt::NoPen);
+            p.setBrush(accent);
+            p.drawEllipse(c, 8.5, 8.5);
+            QPen ck(Qt::white, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            p.setPen(ck);
+            p.drawLine(QPointF(c.x() - 3.5, c.y()),       QPointF(c.x() - 1.0, c.y() + 3.0));
+            p.drawLine(QPointF(c.x() - 1.0, c.y() + 3.0), QPointF(c.x() + 3.8, c.y() - 3.0));
+        }
+
+        // ── Name ─────────────────────────────────────────────────────────
+        QFont f = font();
+        f.setPointSize(9);
+        f.setBold(on);
+        p.setFont(f);
+        p.setPen(palette().color(QPalette::WindowText));
+        p.drawText(QRectF(0, 82, width(), 22), Qt::AlignCenter, m_t.displayName);
+
+        // keyboard focus ring
+        if (hasFocus()) {
+            p.setPen(QPen(accent, 1, Qt::DotLine));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(QRectF(0.5, 0.5, width() - 1, height() - 1), 8, 8);
+        }
+    }
+
+private:
+    ThemeColors m_t;
+};
+} // namespace
+
+// static init (baaki statics ke saath)
+bool ApplicationDialog::s_entityZoomScale = false;   // default OFF = fixed size
+
+bool ApplicationDialog::getGlobalEntityZoomScale() { return s_entityZoomScale; }
+void ApplicationDialog::setGlobalEntityZoomScale(bool enabled) { s_entityZoomScale = enabled; }
 // ─────────────────────────────────────────────────────────────────────────────
 // Static accessors
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,7 +214,7 @@ int ApplicationDialog::getGlobalPhysicsFPS()
 }
 QString ApplicationDialog::getGlobalImageSize()
 {
-    if (!isConfigAvailable()) return "100px";
+    if (!isConfigAvailable()) return "60px";
     return MainWindow::scenarioconfig->getSavedImageSize();
 }
 QString ApplicationDialog::getImageSizeInPixels()
@@ -102,7 +223,7 @@ QString ApplicationDialog::getImageSizeInPixels()
     QRegularExpression re("(\\d+)(?:\\s*px)?", QRegularExpression::CaseInsensitiveOption);
     QRegularExpressionMatch match = re.match(size);
     if (match.hasMatch()) return match.captured(1);
-    return "100";
+    return "60";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,13 +323,18 @@ void ApplicationDialog::setGlobalDeveloperMode(bool enabled)
 {
     if (s_developerMode != enabled) s_developerMode = enabled;
 }
-
+bool ApplicationDialog::getGlobalSharedMode()  { return s_sharedMode; }
+void ApplicationDialog::setGlobalSharedMode(bool enabled)
+{
+    if (s_sharedMode != enabled) s_sharedMode = enabled;
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // Constructor / Destructor
 // ─────────────────────────────────────────────────────────────────────────────
 ApplicationDialog::ApplicationDialog(QWidget *parent)
     : QDialog(parent)
     , settingsGroup(nullptr), developerModeCheckBox(nullptr)
+    , sharedModeCheckBox(nullptr)
     , fpsEdit(nullptr), guiFPSEdit(nullptr)
     , simulationFPSEdit(nullptr), physicsFPSEdit(nullptr), imageSizeEdit(nullptr)
     , okButton(nullptr), cancelButton(nullptr)
@@ -225,9 +351,11 @@ ApplicationDialog::ApplicationDialog(QWidget *parent)
     setStyleSheet(ApplicationDialogStyles::Dialog);
     if (!isMainThread()) return;
 
+    m_initialThemeId = ThemeManager::instance().currentId();   // Cancel pe wapas yahi aayegi
+
     setWindowTitle("Application Settings");
     setModal(true);
-    resize(430, 400);
+    resize(470, 440);
     makeDialogResizable(this);
     setWindowModality(Qt::WindowModal);
     QTimer::singleShot(0, this, [this]() {
@@ -250,6 +378,19 @@ ApplicationDialog::~ApplicationDialog()
     delete simulationFPSValidator; simulationFPSValidator = nullptr;
     delete physicsFPSValidator; physicsFPSValidator = nullptr;
     s_initialized = false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// reject — Cancel / Esc / window close: uncommitted theme wapas revert
+// ─────────────────────────────────────────────────────────────────────────────
+void ApplicationDialog::reject()
+{
+    if (!m_themeCommitted
+        && !m_initialThemeId.isEmpty()
+        && ThemeManager::instance().currentId() != m_initialThemeId) {
+        ThemeManager::instance().setTheme(m_initialThemeId);
+    }
+    QDialog::reject();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,6 +423,22 @@ QWidget* ApplicationDialog::buildGeneralTab()
     devRow->addWidget(developerModeCheckBox);
     devRow->addStretch();
     form->addRow(devLabel, devRow);
+
+    QLabel *shLabel = new QLabel("Shared Memory Mode:", settingsGroup);
+    shLabel->setStyleSheet(ApplicationDialogStyles::FormLabel);
+    sharedModeCheckBox = new QCheckBox(settingsGroup);
+    sharedModeCheckBox->setChecked(getGlobalSharedMode());
+    sharedModeCheckBox->setStyleSheet(ApplicationDialogStyles::CheckBox);
+    connect(sharedModeCheckBox, &QCheckBox::toggled,
+            this, [this](bool checked)
+            {
+                ScenarioConfig::sharedData = checked;
+            });
+
+    QHBoxLayout *shRow = new QHBoxLayout();
+    shRow->addWidget(sharedModeCheckBox);
+    shRow->addStretch();
+    form->addRow(shLabel, shRow);
 
     // Separator
     QFrame *sep = new QFrame(); sep->setFrameShape(QFrame::HLine);
@@ -331,8 +488,68 @@ QWidget* ApplicationDialog::buildGeneralTab()
     imageSizeErrorLabel->setStyleSheet(ApplicationDialogStyles::ErrorLabel);
     form->addRow(imgLbl, imageSizeEdit);
     form->addRow(imageSizeErrorLabel);
+    // ── Entity size scales with zoom (added) ──
+    QLabel *zoomScaleLbl = new QLabel("Scale entity size with zoom:", settingsGroup);
+    zoomScaleLbl->setStyleSheet(ApplicationDialogStyles::FormLabel);
+    entityZoomScaleCheckBox = new QCheckBox(settingsGroup);
+    entityZoomScaleCheckBox->setChecked(getGlobalEntityZoomScale());
+    entityZoomScaleCheckBox->setStyleSheet(ApplicationDialogStyles::CheckBox);
+    QHBoxLayout *zoomScaleRow = new QHBoxLayout();
+    zoomScaleRow->addWidget(entityZoomScaleCheckBox);
+    zoomScaleRow->addStretch();
+    form->addRow(zoomScaleLbl, zoomScaleRow);
     settingsGroup->setLayout(form);
     outer->addWidget(settingsGroup);
+    outer->addStretch();
+    return page;
+
+}
+
+/* ── Appearance tab ──────────────────────────────────────────────────────── */
+QWidget* ApplicationDialog::buildAppearanceTab()
+{
+    QWidget *page = new QWidget();
+    QVBoxLayout *outer = new QVBoxLayout(page);
+    outer->setContentsMargins(12, 12, 12, 12);
+    outer->setSpacing(12);
+
+    QGroupBox *themeGroup = new QGroupBox("Theme", page);
+    themeGroup->setObjectName("themeGroup");
+    themeGroup->setStyleSheet(ApplicationDialogStyles::GroupBox);
+
+    QVBoxLayout *vl = new QVBoxLayout(themeGroup);
+    vl->setContentsMargins(15, 22, 15, 15);
+    vl->setSpacing(14);
+
+    QLabel *hint = new QLabel(
+        "Choose the color theme of the application.\n"
+        "The change is previewed instantly. Click OK to keep it, "
+        "or Cancel to go back to the previous theme.", themeGroup);
+    hint->setWordWrap(true);
+    hint->setStyleSheet("color: #7f8c8d; font-size: 11px; background: transparent;");
+    vl->addWidget(hint);
+
+    QHBoxLayout *cards = new QHBoxLayout();
+    cards->setSpacing(14);
+
+    themeButtonGroup = new QButtonGroup(this);
+    themeButtonGroup->setExclusive(true);
+
+    const QString currentId = ThemeManager::instance().currentId();
+    for (const ThemeColors& theme : ThemeManager::instance().availableThemes()) {
+        ThemeCard *card = new ThemeCard(theme, themeGroup);
+        card->setChecked(theme.id == currentId);
+        themeButtonGroup->addButton(card);
+        cards->addWidget(card);
+        connect(card, &QAbstractButton::clicked, this, [this, id = theme.id]() {
+            m_pendingThemeId = id;
+        });
+    }
+    cards->addStretch();
+    vl->addLayout(cards);
+    vl->addStretch();
+
+    outer->addWidget(themeGroup);
     outer->addStretch();
     return page;
 }
@@ -463,9 +680,10 @@ void ApplicationDialog::setupUI()
         }
     )");
 
-    tabWidget->addTab(buildGeneralTab(),  "General");
-    tabWidget->addTab(buildDatabaseTab(), "Database");
-    tabWidget->addTab(buildPhysicsTab(),  "Physics");
+    tabWidget->addTab(buildGeneralTab(),    "General");
+    tabWidget->addTab(buildAppearanceTab(), "Appearance");
+    tabWidget->addTab(buildDatabaseTab(),   "Database");
+    // tabWidget->addTab(buildPhysicsTab(),    "Physics");
 
     // ── OK / Cancel buttons ───────────────────────────────────────────────
     okButton = new QPushButton("OK", this);
@@ -518,6 +736,7 @@ void ApplicationDialog::setupConnections()
         disconnect(resetDatabaseButton, &QPushButton::clicked, this, nullptr);
         connect(resetDatabaseButton,  &QPushButton::clicked, this, &ApplicationDialog::onResetDatabasePath);
     }
+     m_initialSnapshot = currentSnapshot();
     validateInputs();
 }
 
@@ -545,8 +764,8 @@ void ApplicationDialog::onBrowseDatabasePath()
         if (MainWindow::scenarioconfig) {
             MainWindow::scenarioconfig->saveDatabaseSettings(dbEnabled, dbPath);
         }
+        m_dbChangedInDialog = true;
         emit databaseSettingsChanged(dbEnabled, dbPath);
-
     }
 }
 
@@ -559,7 +778,7 @@ void ApplicationDialog::onResetDatabasePath()
         if (databaseEnabledCheckBox) {
             databaseEnabledCheckBox->setChecked(true);
         }
-
+  m_dbChangedInDialog = true;
         // Update static members
         setGlobalDatabaseEnabled(true);
         setGlobalDatabasePath("");
@@ -569,7 +788,6 @@ void ApplicationDialog::onResetDatabasePath()
             MainWindow::scenarioconfig->saveDatabaseSettings(true, "");
         }
 
-        // Load default Aircraft.db into current editor's library
         MainWindow* mainWin = MainWindow::instance();
         if (mainWin) {
             QMainWindow* currentEditor = mainWin->getCurrentEditor();
@@ -583,7 +801,6 @@ void ApplicationDialog::onResetDatabasePath()
 
             // Load into appropriate editor
             if (ScenarioEditor* scEditor = qobject_cast<ScenarioEditor*>(currentEditor)) {
-                // Load default database into scenario editor's library
                 QFile file(aircraftDbPath);
                 if (file.open(QIODevice::ReadOnly)) {
                     QByteArray data = file.readAll();
@@ -594,12 +811,10 @@ void ApplicationDialog::onResetDatabasePath()
                     if (err.error == QJsonParseError::NoError && doc.isObject()) {
                         QJsonObject obj = doc.object();
                         if (obj.contains("hierarchy")) {
-                            // Load default hierarchy
                             if (MainWindow* mw = MainWindow::instance()) {
                                 if (Hierarchy* dbHier = mw->getDatabaseHierarchy())
                                     dbHier->fromJson(obj["hierarchy"].toObject());
                             }
-                            // Update tree view
                             if (scEditor->libTreeView) {
                                 scEditor->libTreeView->setLibraryFileName("Aircraft.db (Default)");
                                 scEditor->libTreeView->getTreeWidget()->update();
@@ -721,6 +936,7 @@ void ApplicationDialog::onOkClicked()
         int physicsfps= getPhysicsFPS();
         QString imgSz = getImageSize();
         bool devMode  = getDeveloperMode();
+        bool sharedMode = getsharedmemoryMode();
 
         setGlobalFPS(fps);
         setGlobalGUIFPS(guifps);
@@ -728,11 +944,13 @@ void ApplicationDialog::onOkClicked()
         setGlobalPhysicsFPS(physicsfps);
         setGlobalImageSize(imgSz);
         setGlobalDeveloperMode(devMode);
+        setGlobalSharedMode(sharedMode);
 
         emit fpsState(fps);
         emit guiFPSState(guifps);
         emit simulationFPSState(simfps);
         emit physicsFPSState(physicsfps);
+        emit sharedModeState(sharedMode);
 
         QRegularExpression re("(\\d+)(?:\\s*px)?", QRegularExpression::CaseInsensitiveOption);
         QRegularExpressionMatch m = re.match(imgSz);
@@ -741,7 +959,10 @@ void ApplicationDialog::onOkClicked()
             if (ok) emit canvasIconState(px);
         }
         emit developerModeState(devMode);
-
+        // ── Entity zoom scale setting (added) ──
+        bool zoomScale = entityZoomScaleCheckBox && entityZoomScaleCheckBox->isChecked();
+        setGlobalEntityZoomScale(zoomScale);
+        emit entityZoomScaleState(zoomScale);
         // ── Save Database settings ────────────────────────────────────────
         if (databaseEnabledCheckBox && databasePathEdit) {
             bool dbEnabled = databaseEnabledCheckBox->isChecked();
@@ -751,6 +972,20 @@ void ApplicationDialog::onOkClicked()
             setGlobalDatabasePath(dbPath);
             emit databaseSettingsChanged(dbEnabled, dbPath);
         }
+        const SettingsSnapshot now = currentSnapshot();
+        const bool dbChanged = m_dbChangedInDialog
+                               || now.dbEnabled != m_initialSnapshot.dbEnabled
+                               || now.dbPath    != m_initialSnapshot.dbPath;
+        const bool themeChanged = !m_pendingThemeId.isEmpty()
+                                  && m_pendingThemeId != m_initialThemeId;
+
+        m_restartNeeded = dbChanged || themeChanged;
+
+        if (!m_pendingThemeId.isEmpty()
+            && m_pendingThemeId != ThemeManager::instance().currentId()) {
+            ThemeManager::instance().setTheme(m_pendingThemeId);
+        }
+        m_themeCommitted = true;
         accept();
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Save Error", QString("Failed to save settings: %1").arg(e.what()));
@@ -758,6 +993,7 @@ void ApplicationDialog::onOkClicked()
 }
 void ApplicationDialog::onCancelClicked()
 {
+    m_restartNeeded = m_dbChangedInDialog;
     reject();
 }
 
@@ -768,6 +1004,23 @@ int     ApplicationDialog::getFPS()          const { return fpsEdit           ? 
 int     ApplicationDialog::getGUIFPS()       const { return guiFPSEdit        ? guiFPSEdit->text().toInt()        : 60; }
 int     ApplicationDialog::getSimulationFPS()const { return simulationFPSEdit ? simulationFPSEdit->text().toInt() : 60; }
 int     ApplicationDialog::getPhysicsFPS()   const { return physicsFPSEdit    ? physicsFPSEdit->text().toInt()    : 60; }
-QString ApplicationDialog::getImageSize()    const { return imageSizeEdit     ? imageSizeEdit->text()             : "100px"; }
+QString ApplicationDialog::getImageSize()    const { return imageSizeEdit     ? imageSizeEdit->text()             : "60px"; }
 bool    ApplicationDialog::getDeveloperMode()const { return developerModeCheckBox ? developerModeCheckBox->isChecked() : false; }
+bool    ApplicationDialog::getsharedmemoryMode()const { return sharedModeCheckBox ? sharedModeCheckBox->isChecked() : false; }
 
+ApplicationDialog::SettingsSnapshot ApplicationDialog::currentSnapshot() const
+{
+    SettingsSnapshot s;
+    s.fps       = getFPS();
+    s.guiFps    = getGUIFPS();
+    s.simFps    = getSimulationFPS();
+    s.physFps   = getPhysicsFPS();
+    s.imageSize = getImageSize().trimmed().toLower().remove(' ');
+    s.devMode   = getDeveloperMode();
+    s.zoomScale = entityZoomScaleCheckBox && entityZoomScaleCheckBox->isChecked();
+    s.dbEnabled = databaseEnabledCheckBox && databaseEnabledCheckBox->isChecked();
+    QString p   = databasePathEdit ? databasePathEdit->text() : QString();
+    if (p == "No path set") p.clear();
+    s.dbPath    = p;
+    return s;
+}

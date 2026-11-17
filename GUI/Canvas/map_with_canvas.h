@@ -29,6 +29,7 @@ public:
     void setTooltipOptions(const QSet<QString>& options);
     void centerOnEntity(const QString& hierarchyId, bool adjustZoom = false);
     void refreshAllLayers();
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
 

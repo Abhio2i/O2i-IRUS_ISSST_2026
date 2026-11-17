@@ -13,10 +13,10 @@ EsmEmitterQuery esmEmitterFromAesa(const Sensor* s, RFEmitterParams& out)
     out = RFEmitterParams();
     const aesa::RadarConfig cfg = a->getRadarConfig();
     //Vansh
-    qDebug() << "[ESM-AESA]"
-             << "Emitter:" << QString::fromStdString(a->Name)
-             << "frequency_Hz:" << cfg.frequency_Hz
-             << "frequency_MHz:" << cfg.frequency_Hz / 1.0e6;
+    // qDebug() << "[ESM-AESA]"
+    //          << "Emitter:" << QString::fromStdString(a->Name)
+    //          << "frequency_Hz:" << cfg.frequency_Hz
+    //          << "frequency_MHz:" << cfg.frequency_Hz / 1.0e6;
 
     out.emitting = a->Active;
     //Vansh

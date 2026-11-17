@@ -127,15 +127,12 @@ void Specialzone::Update(float delta){
                 for(auto const& pair : entity->sensors.sensors){
                     AESARadar* radar = dynamic_cast<AESARadar*>(pair.second);
                     if(!radar) continue;
-
                     aesa::RadarConfig cfg = radar->getRadarConfig();
-
                     if(distance < collider.CollideRadius){
                         // Platform is inside the zone — apply zone atmosphere.
                         cfg.atmosphere.temperature_C   = Temprature;
                         cfg.atmosphere.humidity_pct    = humidity;
                         cfg.atmosphere.rainRate_mmph   = rain;
-
                         // fog in SpecialZone is a percentage (0-100%).
                         // Convert to metres visibility for the Kunkel fog model:
                         //   0%   → 0 m    (clear, model inactive)
@@ -151,7 +148,6 @@ void Specialzone::Update(float delta){
                         cfg.atmosphere.rainRate_mmph   = 0.0f;
                         cfg.atmosphere.fogVisibility_m = 0.0f;
                     }
-
                     radar->setRadarConfig(cfg);
                 }
             }
@@ -382,6 +378,7 @@ void Specialzone::addComponent(std::string name) {
     }else if (name == "collider") {
         collider.init(this);
             collider.CollideRadius = 20000;
+            collider.getWarning().CollideRadius = 20000;
             collider.parentID = ID;
             root->Components.insert({collider.ID, &collider});
             emit root->componentAdded(QString::fromStdString(ID),QString::fromStdString(collider.ID), "collider");

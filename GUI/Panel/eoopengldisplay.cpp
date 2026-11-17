@@ -19,7 +19,7 @@ EOOpenGLDisplay::EOOpenGLDisplay(QWidget *parent)
     // Phase 1: on-demand repaint pump for smooth gimbal slew. Created here
     // but deliberately NOT started — it only runs while a slew is actually
     // converging (see stepSlew()/paintGL()), so at rest this widget costs
-    // exactly the same CPU/RAM/GPU as before this feature existed.
+    // exactly the same CPU/RAM/GPU a5s before this feature existed.
     slewTimer = new QTimer(this);
     slewTimer->setSingleShot(false);
     connect(slewTimer, &QTimer::timeout, this, &EOOpenGLDisplay::onSlewTick);
@@ -64,6 +64,19 @@ static QString lookHint(float uiAz, float el)
     return h + " · " + v;
 }
 
+// eoopengldisplay.cpp — helper (file-local)
+static QVector2D latLonToEN(double latDeg, double lonDeg,
+                            double originLatDeg, double originLonDeg)
+{
+    constexpr double R = 6378137.0;
+    const double dLat = qDegreesToRadians(latDeg - originLatDeg);
+    const double dLon = qDegreesToRadians(lonDeg - originLonDeg);
+    const double cosLat = std::cos(qDegreesToRadians(originLatDeg));
+    const float east  = static_cast<float>(dLon * cosLat * R);
+    const float north = static_cast<float>(dLat * R);
+    return QVector2D(east, north);
+}
+
 EOOpenGLDisplay::~EOOpenGLDisplay()
 {
     // slewTimer is parented to 'this' so Qt would clean it up anyway, but
@@ -78,11 +91,13 @@ void EOOpenGLDisplay::setSensorParameter(
     float _horizontalCameraAngle,
     std::unordered_map<std::string,
                        std::pair<bool, CartesianCoord>> _EODetectionCoord,
-    float _maxRangeMeters)
+    float _maxRangeMeters,
+    const std::unordered_map<std::string, Entity::Category>& _EODetectionCategory)
 {
     sensorPoseGeo = _sensorPoseGeo;
     horizontalCameraAngle = _horizontalCameraAngle;
     EODetectionCoord = _EODetectionCoord;
+    EODetectionCategory = _EODetectionCategory;
     // Guard against 0/negative (e.g. sensor not configured yet) so the
     // far-clipping plane never collapses to something degenerate.
     maxRangeMeters = (_maxRangeMeters > 1000.0f) ? _maxRangeMeters : 50000.0f;
@@ -443,11 +458,31 @@ void EOOpenGLDisplay::paintGL()
     // maxRangeMeters (pushed in from EODisplay via setSensorParameter(),
     // sourced from EOSensor::range*1000), with a 50km floor so nothing
     // regresses for sensors configured at/under the old default.
+
     const float zFar = std::max(50000.0f, maxRangeMeters);
     projection.perspective(vFovDeg, aspect, 5.0f, zFar);
+
+    if (!m_landOriginSet) {
+        m_landOriginLat = sensorPoseGeo.latitude;
+        m_landOriginLon = sensorPoseGeo.longitude;
+        m_landOriginSet = true;
+    }
+
+    const QVector2D camEN = latLonToEN(
+        sensorPoseGeo.latitude,
+        sensorPoseGeo.longitude,
+        m_landOriginLat,
+        m_landOriginLon);
+
+    // Heading: degrees clockwise from north → radians
+    // sensorPoseGeo.ry convention check — agar world heading alag field ho to wahi use
+    float headingRad = -qDegreesToRadians(sensorPoseGeo.ry);
+    // Agar heading transform se chahiye: platform heading degrees → rad
+
     // --- 4. RENDER ENVIRONMENT ---
     sky.render(projection, cameraMatrix);
-    land.render(projection, cameraMatrix);
+    land.render(projection, cameraMatrix, camEN, headingRad);
+
     // --- 5. RENDER TARGETS ---
     for (const auto& pair : EODetectionCoord) {
 
@@ -468,6 +503,12 @@ void EOOpenGLDisplay::paintGL()
                 target.ry,
                 target.rz
                 );
+
+        Entity::Category cat = Entity::Category::Air;
+        auto cit = EODetectionCategory.find(pair.first);
+        if (cit != EODetectionCategory.end())
+            cat = cit->second;
+
         targets.render(
             projection,
             cameraMatrix,
@@ -476,7 +517,8 @@ void EOOpenGLDisplay::paintGL()
             target.z,
             targetRotation,
             QString(),
-            QString()
+            QString(),
+            cat
             );
     }
 
@@ -534,7 +576,7 @@ void EOOpenGLDisplay::updateTrackedTarget(float currentAltitude, float baseFovDe
             m_lockedTargetId = bestId;
             lockedIt = EODetectionCoord.find(m_lockedTargetId);
         } else {
-            // ★ Coast: last known position pe aim hold
+            // Coast: last known position pe aim hold
             if (m_hasLastLockedCoord) {
                 const CartesianCoord &c = m_lastLockedCoord;
                 float hd = std::sqrt(c.x * c.x + c.z * c.z);
@@ -789,8 +831,13 @@ void EOOpenGLDisplay::updateHudText(float hFovDeg)
     if (m_hudCompass)
         m_hudCompass->setText(compassTapeString(uiAz360));
 
+    // QString altRangeText =
+    //     QString("ALTITUDE\n%1 M").arg(qRound(sensorPoseGeo.altitude));
+    const float altitudeFeet = sensorPoseGeo.altitude * 3.28084f;
+
     QString altRangeText =
-        QString("ALTITUDE\n%1 M").arg(qRound(sensorPoseGeo.altitude));
+        QString("ALTITUDE\n%1 FT").arg(qRound(altitudeFeet));
+
     if (locked && m_lastTrackRangeM > 0.0f) {
         altRangeText += QString("\nSLANT RANGE\n%1 M").arg(qRound(m_lastTrackRangeM));
     }
@@ -856,4 +903,10 @@ void EOOpenGLDisplay::updateHudText(float hFovDeg)
     // ---------- STOP TRACK button ----------
     if (m_hudUntrackButton)
         m_hudUntrackButton->setVisible(locked);
+}
+
+// glDisplay pe public method
+void EOOpenGLDisplay::resetLandOrigin()
+{
+    m_landOriginSet = false;
 }

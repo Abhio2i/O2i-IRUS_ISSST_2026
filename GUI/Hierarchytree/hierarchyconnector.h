@@ -61,8 +61,6 @@ public:
     void connectSignals(Hierarchy* hierarchy, Hierarchy* library, HierarchyTree* treeView,
                         TacticalDisplay* tactical = nullptr,
                         Inspector* inspector = nullptr,
-                        // ARTI CHANGE: naya param — active/inactive toggle par canvas
-                        // refresh karne ke liye (TacticalDisplay ab use nahi ho raha)
                         MapWithCanvas* apiMapWidget = nullptr);
     // Connect library signals
     void connectLibrarySignals(Hierarchy* library, HierarchyTree* libTree);

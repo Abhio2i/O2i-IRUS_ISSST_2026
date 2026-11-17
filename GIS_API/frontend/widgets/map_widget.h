@@ -82,6 +82,7 @@ signals:
     void placingBitmapChanged(const QString& activeName);
     void drawingTypeChanged(const QString& activeType);
     void coordSystemChanged(const QString& sys);
+    void addEntityOnShapeRequested(const QString& shapeId, const QPointF& geoPos);
 
 protected:
     void paintEvent(QPaintEvent* event) override;

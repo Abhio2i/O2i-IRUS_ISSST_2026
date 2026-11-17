@@ -55,7 +55,7 @@ class TacticalRules : public QWidget
 public:
     explicit TacticalRules(QWidget *parent = nullptr);
 
-    // Single-team JSON (current active team) — backward compat
+    // Single-team JSON (current active team)
     QJsonObject  toJson() const;
     void         loadFromJson(const QJsonObject &data);
     void         resetState();
@@ -67,7 +67,6 @@ public:
 
 
 public slots:
-    // Called by DoctrineParameters::forceTypeChanged
     void setForceType(int forceId);
 
 signals:
@@ -94,7 +93,6 @@ private:
     QJsonObject m_blueData;
     QJsonObject m_redData;
     int         m_currentForce = 0;   // 0 = BLUE, 1 = RED
-
     void setupUI();
     void applyStyles();
     void populateDropdowns();

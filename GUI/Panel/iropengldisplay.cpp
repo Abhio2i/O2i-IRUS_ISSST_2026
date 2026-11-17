@@ -54,6 +54,17 @@ static QString lookHint(float uiAz180, float el)
     return h + QStringLiteral(" · ") + v;
 }
 
+static QVector2D latLonToEN(double latDeg, double lonDeg,
+                            double originLatDeg, double originLonDeg)
+{
+    constexpr double R = 6378137.0;
+    const double dLat = qDegreesToRadians(latDeg - originLatDeg);
+    const double dLon = qDegreesToRadians(lonDeg - originLonDeg);
+    const double cosLat = std::cos(qDegreesToRadians(originLatDeg));
+    return QVector2D(static_cast<float>(dLon * cosLat * R),
+                     static_cast<float>(dLat * R));
+}
+
 IROpenGLDisplay::IROpenGLDisplay(QWidget *parent)
     : QOpenGLWidget(parent)
 {
@@ -76,11 +87,17 @@ void IROpenGLDisplay::setSensorParameter(
     float _horizontalCameraAngle,
     const std::unordered_map<std::string,
                              std::pair<bool, CartesianCoord>>& _IRDetectionCoord,
-    float _maxRangeMeters)
+    float _maxRangeMeters,
+    const std::unordered_map<std::string, Entity::Category>& _IRDetectionCategory,
+    const std::unordered_map<std::string, float>& _IRTargetTempC,
+    float backgroundTempC)
 {
-    sensorPoseGeo = _sensorPoseGeo;
+    sensorPoseGeo         = _sensorPoseGeo;
     horizontalCameraAngle = _horizontalCameraAngle;
-    IRDetectionCoord = _IRDetectionCoord;
+    IRDetectionCoord      = _IRDetectionCoord;
+    IRDetectionCategory   = _IRDetectionCategory;
+    IRTargetTempC         = _IRTargetTempC;      // ★
+    m_backgroundTempC     = backgroundTempC;     // ★
     maxRangeMeters = (_maxRangeMeters > 1000.0f) ? _maxRangeMeters : 50000.0f;
 }
 
@@ -342,12 +359,25 @@ void IROpenGLDisplay::paintGL()
     float vFovDeg = qRadiansToDegrees(vFovRad);
 
     projection.setToIdentity();
+
     const float zFar = std::max(50000.0f, maxRangeMeters);
     projection.perspective(vFovDeg, aspect, 5.0f, zFar);
 
+    if (!m_landOriginSet) {
+        m_landOriginLat = sensorPoseGeo.latitude;
+        m_landOriginLon = sensorPoseGeo.longitude;
+        m_landOriginSet = true;
+    }
+    const QVector2D camEN = latLonToEN(
+        sensorPoseGeo.latitude, sensorPoseGeo.longitude,
+        m_landOriginLat, m_landOriginLon);
+
+    // ry = -heading (scan) → shader ko +heading
+    float headingRad = -qDegreesToRadians(sensorPoseGeo.ry);
+
     // --- 4. RENDER ENVIRONMENT ---
     sky.render();
-    land.render(projection, cameraMatrix);
+    land.render(projection, cameraMatrix, camEN, headingRad);
 
     // --- 5. RENDER TARGETS ---
     for (const auto& pair : IRDetectionCoord) {
@@ -366,6 +396,12 @@ void IROpenGLDisplay::paintGL()
                 target.ry,
                 target.rz
                 );
+
+        Entity::Category cat = Entity::Category::Air;
+        auto cit = IRDetectionCategory.find(pair.first);
+        if (cit != IRDetectionCategory.end())
+            cat = cit->second;
+
         targets.render(
             projection,
             cameraMatrix,
@@ -374,7 +410,8 @@ void IROpenGLDisplay::paintGL()
             target.z,
             targetRotation,
             QString(),
-            QString()
+            QString(),
+            cat
             );
     }
 
@@ -383,7 +420,6 @@ void IROpenGLDisplay::paintGL()
 }
 
 /* ===================  TRACK MODE  === */
-
 void IROpenGLDisplay::updateTrackedTarget(float currentAltitude, float baseFovDeg)
 {
     if (!m_trackModeActive) {
@@ -413,7 +449,7 @@ void IROpenGLDisplay::updateTrackedTarget(float currentAltitude, float baseFovDe
             float horizDist = std::sqrt(c.x * c.x + c.z * c.z);
             if (horizDist < TRACK_MIN_RANGE_M) horizDist = TRACK_MIN_RANGE_M;
             const float az = -qRadiansToDegrees(std::atan2(c.x, -c.z));
-            const float el = qRadiansToDegrees(std::atan2(c.y - currentAltitude, horizDist));
+            const float el = qRadiansToDegrees(std::atan2(c.y, horizDist));
             const float dAz = normalizeAngle180(az - currentAzimuth);
             const float dEl = el - currentElevation;
             const float angDistSq = dAz * dAz + dEl * dEl;
@@ -433,7 +469,8 @@ void IROpenGLDisplay::updateTrackedTarget(float currentAltitude, float baseFovDe
                 if (hd < TRACK_MIN_RANGE_M) hd = TRACK_MIN_RANGE_M;
                 setCommandedLOS(
                     -qRadiansToDegrees(std::atan2(c.x, -c.z)),
-                    qRadiansToDegrees(std::atan2(c.y - currentAltitude, hd)));
+                  // qRadiansToDegrees(std::atan2(c.y - currentAltitude, hd)));
+                    qRadiansToDegrees(std::atan2(c.y, hd)));
             }
             m_lastTrackRangeM = 0.0f;
             return;
@@ -457,8 +494,7 @@ void IROpenGLDisplay::updateTrackedTarget(float currentAltitude, float baseFovDe
 
     const float desiredWidthM =
         TRACK_ASSUMED_TARGET_WIDTH_M * TRACK_FRAMING_MULTIPLIER;
-    float desiredHFovDeg = qRadiansToDegrees(
-        2.0f * std::atan((desiredWidthM * 0.5f) / horizontalDistance));
+    float desiredHFovDeg = qRadiansToDegrees(2.0f * std::atan((desiredWidthM * 0.5f) / horizontalDistance));
     if (desiredHFovDeg < 0.3f) desiredHFovDeg = 0.3f;
     if (desiredHFovDeg > baseFovDeg) desiredHFovDeg = baseFovDeg;
 
@@ -610,7 +646,7 @@ void IROpenGLDisplay::layoutHud()
     m_hudCrosshair->setGeometry(w / 2 - chSize / 2, h / 2 - chSize / 2, chSize, chSize);
 
     const int sideBoxW = 180;
-    const int sideBoxH = 90;
+    const int sideBoxH = 120;
     m_hudAltRange->setGeometry(
         margin, h / 2 - sideBoxH / 2, sideBoxW, sideBoxH);
     m_hudTargetAz->setGeometry(
@@ -664,11 +700,29 @@ void IROpenGLDisplay::updateHudText(float hFovDeg)
     if (m_hudCompass)
         m_hudCompass->setText(compassTapeString(uiAz360));
 
+    // QString altRangeText =
+    //     QString("ALTITUDE\n%1 M").arg(qRound(sensorPoseGeo.altitude));
+
+    const float altitudeFeet = sensorPoseGeo.altitude * 3.28084f;
+
     QString altRangeText =
-        QString("ALTITUDE\n%1 M").arg(qRound(sensorPoseGeo.altitude));
+        QString("ALTITUDE\n%1 FT").arg(qRound(altitudeFeet));
+
     if (locked && m_lastTrackRangeM > 0.0f) {
         altRangeText += QString("\nSLANT RANGE\n%1 M").arg(qRound(m_lastTrackRangeM));
     }
+
+    // IR temperature explore
+    if (locked) {
+        auto tit = IRTargetTempC.find(m_lockedTargetId);
+        if (tit != IRTargetTempC.end()) {
+            altRangeText += QString("\nTGT TEMP\n%1 °C")
+                                .arg(tit->second, 0, 'f', 0);
+            altRangeText += QString("\nΔT\n%1 °C")
+                                .arg(tit->second - m_backgroundTempC, 0, 'f', 0);
+        }
+    }
+
     m_hudAltRange->setText(altRangeText);
 
     QString rightText = lookHint(uiAz180, uiEl);

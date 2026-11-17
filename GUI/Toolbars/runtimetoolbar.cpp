@@ -210,6 +210,15 @@ void RuntimeToolBar::createActions()
         Q_UNUSED(checked);
         emit radarDisplayToggled();
     });
+    // ── Statistics Details action ─────────────────────
+    statisticsAction = new QAction(QIcon(withWhiteBg(":/icons/images/statistics.png")),
+                                   tr("Statistics Details"), this);
+    statisticsAction->setCheckable(false);
+    statisticsAction->setObjectName("statisticsAction");
+    statisticsAction->setToolTip(tr("Open Statistics Details window"));
+    connect(statisticsAction, &QAction::triggered, this, [this]() {
+        emit statisticsTriggered();
+    });
 
     // ── Speed control widget ──────────────────────────────────────────────
     speedControlWidget = new QWidget(this);
@@ -307,10 +316,11 @@ bool RuntimeToolBar::eventFilter(QObject *obj, QEvent *event)
 
 void RuntimeToolBar::setupToolBar()
 {
+    addAction(statisticsAction);
     addAction(timingAction);
     addAction(loggerAction);
     addAction(radarToggleAction);
-        addSeparator();
+    addSeparator();
     addAction(startAction);
     addAction(resetAction);
     addAction(nextStepAction);

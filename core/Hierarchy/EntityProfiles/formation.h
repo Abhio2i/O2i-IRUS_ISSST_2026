@@ -47,6 +47,7 @@ public:
     // =========================================================================
     Constants::FormationType formationType;
     int count;
+    float scale;
     FormationPosition *mothership;
     std::unordered_map<std::string,FormationPosition*> *formationPositions;
 
@@ -64,6 +65,7 @@ public:
     // DESCRIPTION: Mandatory methods for entity lifecycle and dynamic systems.
     // =========================================================================
     void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
     std::vector<std::string> getSupportedComponents() override;
     void addSupportedcomponent() override;
     void addComponent(std::string name) override;
@@ -83,8 +85,6 @@ public:
     QStringList formationTypeOptions() const;
     void clear();
 
-
-
     void removeEntityFromFormation(const QString& entityId);
     bool addEntityToFormation(Entity* entity);
     bool isAllyEntity(const QString& entityId) const;
@@ -92,6 +92,8 @@ public:
     void breakFormation();
     void resumeFormation();
     bool isFormationActive() const;
+    bool isLiveEntity(Entity* e) const;
+
 private:
     // =========================================================================
     // SECTION: Private Helpers

@@ -147,6 +147,13 @@ private:
     QString getCurrentEditorContext() const;
     QString multiSelectMenuStyleSheet() const;
     QString m_libraryFilePath;
+
+    const QIcon* profileIcon;
+    const QIcon* folderIcon;
+    const QIcon* entityIcon;
+    const QIcon* componentIcon;
+    const QIcon* subComponentIcon;
+
 };
 
 #endif // HIERARCHYTREE_H

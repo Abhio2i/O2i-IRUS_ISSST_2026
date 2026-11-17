@@ -1028,6 +1028,10 @@ void MapWidget::mousePressEvent(QMouseEvent* event)
                 QJsonObject p = m_shapeApi->getShapeProperties(hitId);
             }
         }
+
+        if (!hitId.isEmpty() && !shapeLayerIsEditable(hitId))
+            hitId.clear();
+
         if (!hitId.isEmpty()) {
             selectShape(hitId);
             if (m_editingShapeId != hitId)  m_editingShapeId.clear();
@@ -1281,6 +1285,10 @@ void MapWidget::keyPressEvent(QKeyEvent* event)
     }
     if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) {
         if (!m_selectedShapeId.isEmpty()) {
+            if (!shapeLayerIsEditable(m_selectedShapeId)) {   // NEW: dialog nahi aayega
+                event->accept();
+                return;
+            }
             deleteShape(m_selectedShapeId);
             event->accept();
             return;
@@ -1386,6 +1394,8 @@ void MapWidget::showContextMenu(QMouseEvent* event)
         shapeId = findBitmapAtCanvas(event->pos());
     if (shapeId.isEmpty())
         shapeId = m_shapeApi->findShapeAt(geoPos);
+    if (!shapeId.isEmpty() && !shapeLayerIsEditable(shapeId))
+        shapeId.clear();
     UiActionContext ctx;
     ctx.map = this;
     ctx.parentWidget = this;
@@ -1465,6 +1475,9 @@ void MapWidget::showContextMenu(QMouseEvent* event)
 }
 
 void MapWidget::deleteShape(const QString& shapeId) {
+    if (!shapeLayerIsEditable(shapeId))
+        return;
+
     if (QMessageBox::question(this, "Delete Shape",
                               "Are you sure you want to delete this shape?",
                               QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
@@ -1708,6 +1721,9 @@ void MapWidget::drawEditHandles(QPainter& painter)
 }
 void MapWidget::selectShape(const QString& shapeId)
 {
+    if (!shapeId.isEmpty() && !shapeLayerIsEditable(shapeId))
+        return;
+
     m_selectedShapeId = shapeId;
     m_selectedShapeIds.clear();
     if (!shapeId.isEmpty())
@@ -1718,8 +1734,14 @@ void MapWidget::selectShape(const QString& shapeId)
 
 void MapWidget::setSelectedShapes(const QStringList& shapeIds)
 {
-    m_selectedShapeIds = QSet<QString>(shapeIds.begin(), shapeIds.end());
-    m_selectedShapeId = (shapeIds.size() == 1) ? shapeIds.first() : QString();
+    QStringList filtered;
+    for (const QString& sid : shapeIds)
+        if (shapeLayerIsEditable(sid))
+            filtered << sid;
+
+    m_selectedShapeIds = QSet<QString>(filtered.begin(), filtered.end());
+    m_selectedShapeId = (filtered.size() == 1) ? filtered.first() : QString();
+    emit shapeSelectionChanged(m_selectedShapeId);
     update();
 }
 

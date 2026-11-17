@@ -61,7 +61,6 @@ QString DISReferenceDataLoader::resolveDataPath()
 bool DISReferenceDataLoader::writeMinimalFallback(const QString& path)
 {
     QJsonObject root;
-
     QJsonObject meta;
     meta["source"] = "Minimal fallback — replace with the full SISO-REF-010 v35 extract";
     meta["note"]   = "Only Kind and Domain(Platform) are populated here. "

@@ -43,12 +43,18 @@ public:
     // Static great-circle distance
     Q_INVOKABLE static double distanceMeters(double lat1, double lon1,
                                              double lat2, double lon2);
+  enum class DistanceMethod { Cartesian, Ellipsoidal };
+    void setDistanceMethod(DistanceMethod method);
+    DistanceMethod distanceMethod() const;
+    static double cartesianMeters(double lat1, double lon1, double lat2, double lon2);
+    static double ellipsoidalMeters(double lat1, double lon1, double lat2, double lon2);
 
 signals:
     void measuringChanged(bool active);
     void pointsChanged();
     void cleared();
     void displayUnitChanged(const QString& unit);
+     void distanceMethodChanged(MeasureApi::DistanceMethod method);
 
 private:
     explicit MeasureApi(QObject* parent = nullptr);
@@ -57,6 +63,7 @@ private:
     bool m_active = false;
     QVector<QPointF> m_points;
     QString m_displayUnit = QStringLiteral("meters");
+        static DistanceMethod s_method;
 };
 
 #endif // MEASURE_API_H

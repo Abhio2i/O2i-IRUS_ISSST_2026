@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <random>
 #include <iomanip>
+#include <QtMath>
 // Constants for WGS84 ellipsoid
 constexpr double WGS84_A = 6378137.0; // Semi-major axis in meters
 constexpr double WGS84_E2 = 0.00669437999014; // First eccentricity squared
@@ -46,7 +47,7 @@ Surrounding IRSensor::getSurrounding(
     // 0.001   → hazy
 
     //Setting Rain
-    float alpha = 0.0001;// This Value is Approx
+    float alpha = 0.0001; // This Value is Approx
     float beta  = 0.8;   // This Value is Approx
     srd.k_rain   = alpha * pow(rainRate, beta);
 
@@ -212,6 +213,7 @@ void IRSensor::scan()
         const float quickDist =
             eo_ir->getHorizontalDistance(sensor_cood, obj_cood);
         if (quickDist > range * 1000.0f * 1.1f) {
+            IRDetectionCategory[ID] = platform->category;
             IRDetectionCoord[ID] = {false, CartesianCoord{}};
             continue;
         }
@@ -246,18 +248,22 @@ void IRSensor::scan()
         CartesianCoord targetCoord;
         {
             const float horizontalAngleRad =
-                targetHorizontalTargetAngle * static_cast<float>(M_PI) / 180.0f;
+                 qDegreesToRadians(targetHorizontalTargetAngle);
             targetCoord.x =
                 targetHorizontalDistance * std::sin(horizontalAngleRad);
             targetCoord.y = targetAltitude;
+            //targetCoord.y = targetAltitude - sensorAltitude;
             targetCoord.z =
                 -targetHorizontalDistance * std::cos(horizontalAngleRad);
-            targetCoord.rx = targetPitch;
-            targetCoord.ry = -(targetHeading - sensorHeading);
-            targetCoord.rz = 0.0f;
+
+            const QVector3D targetEuler = tf.rotation().toEulerAngles();
+            targetCoord.rx = -targetEuler.x();                         // pitch (samne tilt)
+            targetCoord.ry = -(targetHeading - sensorHeading);        // relative yaw (pehle jaisa)
+            targetCoord.rz = targetEuler.z();
         }
 
         if (!inFov) {
+            IRDetectionCategory[ID] = platform->category;
             IRDetectionCoord[ID] = {false, targetCoord};
             continue;
         }
@@ -265,17 +271,22 @@ void IRSensor::scan()
         // 3) Slant range
         const float dist3d = eo_ir->distanceBtw(sensor_cood, obj_cood);
         if (dist3d > range * 1000.0f) {
+            IRDetectionCategory[ID] = platform->category;
             IRDetectionCoord[ID] = {false, targetCoord};
             continue;
         }
 
         target_range = calculate3DDistance(obj_cood, sensor_cood);
-        background_temperature_K =
-            celsius_to_kelvin(background_temperature_deg);
+        background_temperature_K = celsius_to_kelvin(background_temperature_deg);
+
+        // Entity IR signature (entity.h: surfaceTemp, Temperature, specularReflectivity)
+        const float signatureC =
+            (platform->surfaceTemp > -100.0f)
+                ? platform->surfaceTemp
+                : platform->Temperature;
 
         EOIR_Target target_para{};
-        target_para.surfaceTemp =
-            platform->surfaceTemp;
+        target_para.surfaceTemp = signatureC;
         target_para.specularReflectivity =
             platform->specularReflectivity;
 
@@ -283,18 +294,20 @@ void IRSensor::scan()
             environment_para, target_para, sensor_para);
 
         // IR: thoda stricter threshold (purane 0.9 ke qareeb, range-aware)
-        float detectThresh = 0.70f;
+        float detectThresh = 0.50f;
         if (target_range < 5000.f)
-            detectThresh = 0.85f;
+            detectThresh = 0.70f;
         else if (target_range < 15000.f)
-            detectThresh = 0.75f;
+            detectThresh = 0.55f;
         else
-            detectThresh = 0.60f;
+            detectThresh = 0.40f;
 
-        IRDetectionCoord[ID] = {
-            (result >= detectThresh),
-            targetCoord
-        };
+
+        const bool detected = (result >= detectThresh);
+
+        IRDetectionCategory[ID] = platform->category;
+        IRDetectionCoord[ID] = { detected, targetCoord };
+        IRTargetTempC[ID] = signatureC;   // ★ UI / HUD explore
     }
 }
 
@@ -510,7 +523,6 @@ QJsonObject IRSensor::toJson() const {
     defaultObj["sensor waveband end"] =   toParm(sensor_waveband.second,"L",0,1000000);
     defaultObj["visibility"]    = toParm(visibility_m         ,"m",0,std::numeric_limits<float>::max());
     defaultObj["mass density"]  = toParm(mass_density_g_m3    ,"g/m3",0,100);
-    defaultObj["range km"]      = toParm(range_km             ,"km"  ,0,100);
     defaultObj["particle diameter m"]   = toParm(particle_diameter_m  ,"m",0,100);
     defaultObj["material density g m3"] = toParm(material_density_g_m3,"g/m3",0,100);
     defaultObj["q ext"] = toParm(q_ext, "Q_exe",1,100);
@@ -647,9 +659,6 @@ void IRSensor::fromJson(const QJsonObject& obj) {
         }
         if(defaultObj.contains("mass density")){
             mass_density_g_m3   = valueFromParm(defaultObj["mass density"].toObject());
-        }
-        if(defaultObj.contains("range km")){
-            range_km   = valueFromParm(defaultObj["range km"].toObject());
         }
         if(defaultObj.contains("particle diameter m")){
             particle_diameter_m   = valueFromParm(defaultObj["particle diameter m"].toObject());

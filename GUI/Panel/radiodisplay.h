@@ -88,6 +88,7 @@ private:
     QVector<Radio::RadioTarget> targets;
     QComboBox* radioDropdown = nullptr;
     void updateDropdown();
+    bool rebuildVisibleRadios();   // rebuild radiolist without jam-suppressed radios; true if changed
 
     // %%% Drawing Methods %%%
     void drawBackground(QPainter &p);

@@ -47,6 +47,10 @@
 #include "database-styles.h"
 #include "GUI/Inspector/inspector-styles.h"
 #include "GUI/Hierarchytree/formationcanvaswidget.h"
+#include <GUI/mainwindow.h>
+#include <QCoreApplication>
+#include <QFile>
+#include <QFileInfo>
 
 
 // %%% Utility Functions %%%
@@ -430,24 +434,42 @@ void DatabaseEditor::updateStatusBar(const QString &message)
 /* Load project from file with progress dialog */
 void DatabaseEditor::loadRecentProject(const QString& filePath)
 {
+    MainWindow* mainWin = MainWindow::instance();
+
+    struct OverlayGuard {
+        MainWindow* mw;
+        ~OverlayGuard() { if (mw) mw->hideLoadingOverlay(); }
+    };
+    OverlayGuard guard{mainWin};
+
+    if (mainWin) {
+        mainWin->showLoadingOverlay("Loading Database...");
+        QCoreApplication::processEvents();
+    }
+
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
+        if (mainWin) mainWin->hideLoadingOverlay();
         QMessageBox::warning(this, "Error", "Failed to open database file");
         return;
     }
-    QByteArray data = file.readAll();
+    QByteArray fileData = file.readAll();
     file.close();
+
     QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+    QJsonDocument doc = QJsonDocument::fromJson(fileData, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        if (mainWin) mainWin->hideLoadingOverlay();
         QMessageBox::warning(this, "Error", "Invalid database file format");
         return;
     }
     QJsonObject obj = doc.object();
     if (!obj.contains("hierarchy")) {
+        if (mainWin) mainWin->hideLoadingOverlay();
         QMessageBox::warning(this, "Error", "Not a valid database file");
         return;
     }
+
     QJsonObject hier = obj["hierarchy"].toObject();
     hierarchy->fromJson(hier);
     lastSavedFilePath = filePath;

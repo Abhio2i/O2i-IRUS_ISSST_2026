@@ -2,47 +2,49 @@
 #define TORPEDO_H
 
 #include "core/Hierarchy/EntityProfiles/weapon.h"
-
-class Torpedo : public Weapon
+class Torpedo: public Weapon
 {
     Q_OBJECT
 public:
     explicit Torpedo(Hierarchy* h);
+    ~Torpedo();
 
-    WeaponType weaponType = WeaponType::Torpedo;
-    QString weaponTypeName() const override { return "Torpedo"; }
+    float LaunchDepth = 50.0f;           // meters
+    float CurrentDepth = 50.0f;          // meters
+    float Speed = 10.0f;                 // m/s
+    float MaxSpeed = 25.0f;              // m/s
+    float Acceleration = 2.0f;           // m/s²
+    float TurnRate = 5.0f;               // degrees/s
+    float MaxOperatingDepth = 500.0f;    // meters
+    float OperatingLifetime = 600.0f;    // seconds
+    float WaterCurrent = 0.0f;           // m/s
 
-    GuidanceType   guidanceType   = GuidanceType::SemiActive;
-    PropulsionType propulsionType = PropulsionType::LiquidRocket;
-    void Update() override;
-    enum class HomingMode { Passive, Active, WireGuided, WakeHoming };
-    HomingMode homingMode = HomingMode::Active;
-    bool  isWireGuided    = false;
-    float wireLength      = 20000.0f;
-    float thrustMain      = 50000.0f;
-    float burnTime        = 600.0f;
-    float specificImpulse = 100.0f;
-    float runDepth        = 50.0f;
-    float maxDepth        = 900.0f;
-    float searchPatternRadius = 1000.0f;
+    bool GuidanceEnabled = true;
+    bool PropulsionEnabled = true;
 
-    enum class TargetMode { AntiSurface, AntiSubmarine, DualMode };
-    TargetMode targetMode = TargetMode::DualMode;
-    float seekerRange     = 5000.0f;
-    float seekerFOV       = 60.0f;
-    bool  isLocked        = false;
+    void Update()override{};
+    void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
+    std::vector<std::string> getSupportedComponents() override;
 
-    void        launch()                              override;
-    void        updateGuidance()                      override;
-    void        scan()                                override;
-    bool        canEngage(Platform *target)           override;
+    void addSupportedcomponent() override;
+
+    void addComponent(std::string name) override;
+
+    void removeComponent(std::string name) override;
+
+    QJsonObject getComponent(std::string name) override;
+
+    void updateComponent(QString name, const QJsonObject& obj) override;
+
     QJsonObject toJson()                        const override;
     void        fromJson(const QJsonObject&)          override;
-
-    QString homingModeToString()               const;
-    QString targetModeToString()               const;
-    void    setHomingModeFromString   (const QString&);
-    void    setTargetModeFromString   (const QString&);
+    QJsonObject AdditionalParameters;   //!< User-defined extension parameters
+    void SaveState();
+    void RestoreState();
+private:
+    bool statesaved = false;
+    QJsonObject InitalState;
 };
 
 #endif // TORPEDO_H

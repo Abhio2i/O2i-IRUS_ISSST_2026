@@ -12,6 +12,25 @@
 #include <QtEndian>
 #include <QDebug>
 #include <cmath>
+// KML color format: aabbggrr
+static QString kmlColor(const QColor& c, int alpha = 255)
+{
+    QColor col = c.isValid() ? c : QColor(Qt::red);
+    return QString("%1%2%3%4")
+        .arg(alpha, 2, 16, QChar('0'))
+        .arg(col.blue(), 2, 16, QChar('0'))
+        .arg(col.green(), 2, 16, QChar('0'))
+        .arg(col.red(), 2, 16, QChar('0'));
+}
+
+static QColor kmlToColor(const QString& t)
+{
+    if (t.size() != 8) return QColor();
+    bool ok = false;
+    uint v = t.toUInt(&ok, 16);
+    if (!ok) return QColor();
+    return QColor(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff);
+}
 
 static QList<QPointF> ringFromShape(const ShapeData& s)
 {
@@ -62,11 +81,29 @@ public:
     QString id() const override { return QStringLiteral("csv"); }
     QString filter() const override { return QStringLiteral("CSV (*.csv)"); }
     QStringList extensions() const override { return {QStringLiteral("csv")}; }
+    // bool exportShapes(const QList<ShapeData>& shapes, const QString& path) const override {
+    //     QFile f(path);
+    //     if (!f.open(QIODevice::WriteOnly|QIODevice::Text|QIODevice::Truncate)) return false;
+    //     QTextStream out(&f);
+    //     out << "Name,Type,Longitude,Latitude,Geometry_WKT\n";
+    //     for (const ShapeData& s : shapes) {
+    //         QString name = s.text.isEmpty() ? s.type : s.text;
+    //         if (name.contains(',') || name.contains('"'))
+    //             name = "\"" + QString(name).replace("\"","\"\"") + "\"";
+    //         QString wkt = toWkt(s);
+    //         if (wkt.contains(',') || wkt.contains('"'))
+    //             wkt = "\"" + wkt.replace("\"","\"\"") + "\"";
+    //         out << name << ',' << s.type << ','
+    //             << QString::number(s.longitude,'f',8) << ','
+    //             << QString::number(s.latitude,'f',8) << ',' << wkt << '\n';
+    //     }
+    //     return true;
+    // }
     bool exportShapes(const QList<ShapeData>& shapes, const QString& path) const override {
         QFile f(path);
         if (!f.open(QIODevice::WriteOnly|QIODevice::Text|QIODevice::Truncate)) return false;
         QTextStream out(&f);
-        out << "Name,Type,Longitude,Latitude,Geometry_WKT\n";
+        out << "Name,Type,Longitude,Latitude,Geometry_WKT,Color\n";
         for (const ShapeData& s : shapes) {
             QString name = s.text.isEmpty() ? s.type : s.text;
             if (name.contains(',') || name.contains('"'))
@@ -74,9 +111,11 @@ public:
             QString wkt = toWkt(s);
             if (wkt.contains(',') || wkt.contains('"'))
                 wkt = "\"" + wkt.replace("\"","\"\"") + "\"";
+            QString color = s.color.isValid() ? s.color.name() : QStringLiteral("#ff0000");
             out << name << ',' << s.type << ','
                 << QString::number(s.longitude,'f',8) << ','
-                << QString::number(s.latitude,'f',8) << ',' << wkt << '\n';
+                << QString::number(s.latitude,'f',8) << ',' << wkt << ','
+                << color << '\n';
         }
         return true;
     }
@@ -99,6 +138,7 @@ public:
         auto idx = [&](const QStringList& names){ for(const QString& n:names){int i=h.indexOf(n); if(i>=0)return i;} return -1; };
         int wi=idx({"Geometry_WKT","WKT","geom","geometry"});
         int ni=idx({"Name","name"}); int ti=idx({"Type","type"});
+        int ci=idx({"Color","color"});
         if (wi<0) return result;
         while (!in.atEnd()) {
             QStringList fields = split(in.readLine());
@@ -106,6 +146,10 @@ public:
             ShapeData s = fromWkt(fields[wi].trimmed(), ti>=0&&ti<fields.size()?fields[ti]:QString());
             if (s.type.isEmpty()) continue;
             if (ni>=0&&ni<fields.size()) s.text=fields[ni];
+            if (ci>=0&&ci<fields.size()) {
+                QColor c(fields[ci].trimmed());
+                if (c.isValid()) s.color=c;
+            }
             result.append(s);
         }
         return result;
@@ -126,6 +170,27 @@ private:
         }
         return QString("POINT(%1 %2)").arg(s.longitude,0,'f',8).arg(s.latitude,0,'f',8);
     }
+    // static ShapeData fromWkt(const QString& wkt, const QString& hint) {
+    //     ShapeData s; s.color=Qt::red; s.lineWidth=2;
+    //     QString u=wkt.toUpper(), body=wkt;
+    //     int a=body.indexOf('('), b=body.lastIndexOf(')');
+    //     if(a>=0&&b>a) body=body.mid(a+1,b-a-1);
+    //     body.replace('(',' ').replace(')',' ');
+    //     QList<QPointF> pts;
+    //     for (const QString& pair: body.split(',', Qt::SkipEmptyParts)) {
+    //         QStringList xy=pair.trimmed().split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    //         if(xy.size()>=2) pts.append(QPointF(xy[0].toDouble(), xy[1].toDouble()));
+    //     }
+    //     if(pts.isEmpty()) return s;
+    //     if(u.contains("POINT")){ s.type=hint.compare("text",Qt::CaseInsensitive)==0?"text":"point"; s.longitude=pts[0].x(); s.latitude=pts[0].y(); }
+    //     else if(u.contains("LINESTRING")){ s.type="line"; s.points=pts.toVector(); centroidOf(pts,s.longitude,s.latitude); }
+    //     else if(u.contains("POLYGON")){
+    //         if(pts.size()>1&&pts.first()==pts.last()) pts.removeLast();
+    //         if(hint.compare("circle",Qt::CaseInsensitive)==0){ s.type="circle"; centroidOf(pts,s.longitude,s.latitude); s.radius=std::abs(pts[0].x()-s.longitude); }
+    //         else { s.type=hint.compare("rectangle",Qt::CaseInsensitive)==0?"rectangle":"polygon"; s.points=pts.toVector(); centroidOf(pts,s.longitude,s.latitude); }
+    //     }
+    //     return s;
+    // }
     static ShapeData fromWkt(const QString& wkt, const QString& hint) {
         ShapeData s; s.color=Qt::red; s.lineWidth=2;
         QString u=wkt.toUpper(), body=wkt;
@@ -138,12 +203,40 @@ private:
             if(xy.size()>=2) pts.append(QPointF(xy[0].toDouble(), xy[1].toDouble()));
         }
         if(pts.isEmpty()) return s;
-        if(u.contains("POINT")){ s.type=hint.compare("text",Qt::CaseInsensitive)==0?"text":"point"; s.longitude=pts[0].x(); s.latitude=pts[0].y(); }
-        else if(u.contains("LINESTRING")){ s.type="line"; s.points=pts.toVector(); centroidOf(pts,s.longitude,s.latitude); }
+
+        if(u.contains("POINT")){
+            s.type=hint.compare("text",Qt::CaseInsensitive)==0?"text":"point";
+            s.longitude=pts[0].x(); s.latitude=pts[0].y();
+        }
+        else if(u.contains("LINESTRING")){
+            s.type="line"; s.points=pts.toVector();
+            centroidOf(pts,s.longitude,s.latitude);
+        }
         else if(u.contains("POLYGON")){
             if(pts.size()>1&&pts.first()==pts.last()) pts.removeLast();
-            if(hint.compare("circle",Qt::CaseInsensitive)==0){ s.type="circle"; centroidOf(pts,s.longitude,s.latitude); s.radius=std::abs(pts[0].x()-s.longitude); }
-            else { s.type=hint.compare("rectangle",Qt::CaseInsensitive)==0?"rectangle":"polygon"; s.points=pts.toVector(); centroidOf(pts,s.longitude,s.latitude); }
+
+            if(hint.compare("circle",Qt::CaseInsensitive)==0){
+                s.type="circle";
+                centroidOf(pts,s.longitude,s.latitude);
+                s.radius=std::abs(pts[0].x()-s.longitude);
+            }
+            else if(hint.compare("rectangle",Qt::CaseInsensitive)==0){
+                double minX=pts[0].x(), maxX=minX, minY=pts[0].y(), maxY=minY;
+                for(const QPointF& p: pts){
+                    minX=qMin(minX,p.x()); maxX=qMax(maxX,p.x());
+                    minY=qMin(minY,p.y()); maxY=qMax(maxY,p.y());
+                }
+                s.type="rectangle";
+                s.longitude=(minX+maxX)/2.0;
+                s.latitude =(minY+maxY)/2.0;
+                s.width    =maxX-minX;
+                s.height   =maxY-minY;
+                s.points.clear();
+            }
+            else {
+                s.type="polygon"; s.points=pts.toVector();
+                centroidOf(pts,s.longitude,s.latitude);
+            }
         }
         return s;
     }
@@ -164,6 +257,20 @@ public:
             xml.writeStartElement("Placemark");
             xml.writeTextElement("name", s.text.isEmpty()?s.type:s.text);
             xml.writeTextElement("description", s.type);
+
+            xml.writeStartElement("Style");
+            xml.writeStartElement("IconStyle");
+            xml.writeTextElement("color", kmlColor(s.color));
+            xml.writeEndElement();
+            xml.writeStartElement("LineStyle");
+            xml.writeTextElement("color", kmlColor(s.color));
+            xml.writeTextElement("width", QString::number(s.lineWidth > 0 ? s.lineWidth : 2));
+            xml.writeEndElement();
+            xml.writeStartElement("PolyStyle");
+            xml.writeTextElement("color", kmlColor(s.color, 0x55));
+            xml.writeEndElement();
+            xml.writeEndElement(); // Style
+
             if(s.type=="point"||s.type=="text"||s.type=="bitmap"){
                 xml.writeStartElement("Point");
                 xml.writeTextElement("coordinates", QString("%1,%2,0").arg(s.longitude,0,'f',8).arg(s.latitude,0,'f',8));
@@ -189,7 +296,7 @@ public:
     QList<ShapeData> importShapes(const QString& path) const override {
         QList<ShapeData> result;
         QFile f(path); if(!f.open(QIODevice::ReadOnly|QIODevice::Text)) return result;
-        QXmlStreamReader xml(&f); QString name;
+        QXmlStreamReader xml(&f); QString name, desc; QColor col;
         auto parse=[](const QString& t){
             QList<QPointF> pts;
             for(const QString& tok: t.split(QRegularExpression("[\\s]+"), Qt::SkipEmptyParts)){
@@ -201,15 +308,26 @@ public:
         while(!xml.atEnd()){
             xml.readNext();
             if(!xml.isStartElement()) continue;
-            if(xml.name()==QLatin1String("name")) name=xml.readElementText();
+            if(xml.name()==QLatin1String("Placemark")) { col=QColor(); name.clear(); desc.clear(); }
+            else if(xml.name()==QLatin1String("color")) {
+                QColor c=kmlToColor(xml.readElementText().trimmed());
+                if(!col.isValid()) col=c;
+            }
+            else if(xml.name()==QLatin1String("name")) name=xml.readElementText();
+            else if(xml.name()==QLatin1String("description")) desc=xml.readElementText().trimmed();
             else if(xml.name()==QLatin1String("Point")||xml.name()==QLatin1String("LineString")||xml.name()==QLatin1String("Polygon")){
                 QString tag=xml.name().toString();
-                ShapeData s; s.color=Qt::red; s.lineWidth=2; if(!name.isEmpty()) s.text=name;
-                while(!(xml.isEndElement()&&xml.name()==tag)){
+                ShapeData s; s.color=col.isValid()?col:QColor(Qt::red); s.lineWidth=2;
+                // name fallback me type hi likha hota hai, wo text nahi hai
+                if(!name.isEmpty() && (desc=="text" || name!=desc)) s.text=name;
+                while(!(xml.isEndElement()&&xml.name()==tag) && !xml.atEnd()){
                     xml.readNext();
                     if(xml.isStartElement()&&xml.name()==QLatin1String("coordinates")){
                         auto pts=parse(xml.readElementText());
-                        if(tag=="Point"&&!pts.isEmpty()){ s.type="point"; s.longitude=pts[0].x(); s.latitude=pts[0].y(); }
+                        if(tag=="Point"&&!pts.isEmpty()){
+                            s.type=(desc=="text")?"text":"point";
+                            s.longitude=pts[0].x(); s.latitude=pts[0].y();
+                        }
                         else if(tag=="LineString"){ s.type="line"; s.points=pts.toVector(); centroidOf(pts,s.longitude,s.latitude); }
                         else { if(pts.size()>1&&pts.first()==pts.last()) pts.removeLast(); s.type="polygon"; s.points=pts.toVector(); centroidOf(pts,s.longitude,s.latitude); }
                     }
@@ -234,6 +352,8 @@ public:
         for(const ShapeData& s: shapes){
             out << "  <gml:featureMember><Feature>\n";
             out << "    <gml:name>" << (s.text.isEmpty()?s.type:s.text).toHtmlEscaped() << "</gml:name>\n";
+            out << "    <type>" << s.type.toHtmlEscaped() << "</type>\n";
+            out << "    <color>" << (s.color.isValid() ? s.color.name() : QStringLiteral("#ff0000")) << "</color>\n";
             auto c=[](double x,double y){return QString("%1,%2").arg(x,0,'f',10).arg(y,0,'f',10);};
             if(s.type=="point"||s.type=="text")
                 out << "    <gml:Point srsName=\"CRS:84\"><gml:coordinates>" << c(s.longitude,s.latitude) << "</gml:coordinates></gml:Point>\n";
@@ -257,12 +377,14 @@ public:
     QList<ShapeData> importShapes(const QString& path) const override {
         QList<ShapeData> result;
         QFile f(path); if(!f.open(QIODevice::ReadOnly|QIODevice::Text)) return result;
-        QXmlStreamReader xml(&f); QString name, geom;
+        QXmlStreamReader xml(&f); QString name, geom, typeHint; QColor col;
         while(!xml.atEnd()){
             xml.readNext();
             if(xml.isStartElement()){
                 QString tag=xml.name().toString();
                 if(tag=="name") name=xml.readElementText();
+                else if(tag=="type") typeHint=xml.readElementText().trimmed();
+                else if(tag=="color") col=QColor(xml.readElementText().trimmed());
                 else if(tag=="Point"||tag=="LineString"||tag=="Polygon") geom=tag;
                 else if(tag=="coordinates"||tag=="posList"||tag=="pos"){
                     bool comma=(tag=="coordinates");
@@ -277,8 +399,12 @@ public:
                         QStringList v=text.split(QRegularExpression("[\\s]+"), Qt::SkipEmptyParts);
                         for(int i=0;i+1<v.size();i+=2) pts.append(QPointF(v[i].toDouble(),v[i+1].toDouble()));
                     }
-                    ShapeData s; s.color=Qt::red; s.lineWidth=2; if(!name.isEmpty()) s.text=name;
-                    if(geom=="Point"&&!pts.isEmpty()){ s.type="point"; s.longitude=pts[0].x(); s.latitude=pts[0].y(); result.append(s); }
+                    ShapeData s; s.color=col.isValid()?col:QColor(Qt::red); s.lineWidth=2;
+                    if(!name.isEmpty() && (typeHint=="text" || name!=typeHint)) s.text=name;
+                    if(geom=="Point"&&!pts.isEmpty()){
+                        s.type=(typeHint=="text")?"text":"point";
+                        s.longitude=pts[0].x(); s.latitude=pts[0].y(); result.append(s);
+                    }
                     else if(geom=="LineString"&&pts.size()>=2){ s.type="line"; s.points=pts.toVector(); centroidOf(pts,s.longitude,s.latitude); result.append(s); }
                     else if(geom=="Polygon"&&pts.size()>=3){
                         if(pts.first()==pts.last()) pts.removeLast();
@@ -288,6 +414,7 @@ public:
             } else if(xml.isEndElement()){
                 QString tag=xml.name().toString();
                 if(tag=="Point"||tag=="LineString"||tag=="Polygon") geom.clear();
+                else if(tag=="Feature") { col=QColor(); name.clear(); typeHint.clear(); }
             }
         }
         return result;
@@ -318,7 +445,38 @@ public:
         if(!polygons.isEmpty()) ok|=writeSet(polygons, dir+"/"+base+(points.isEmpty()&&lines.isEmpty()?".shp":"_polygons.shp"), 5);
         return ok;
     }
-    QList<ShapeData> importShapes(const QString& path) const override { return readShp(path); }
+    QList<ShapeData> importShapes(const QString& path) const override {
+        QFileInfo fi(path);
+        QString dir  = fi.absolutePath();
+        QString base = fi.completeBaseName();
+
+        // _points / _lines / _polygons suffix ho to common base nikalo
+        QString common = base;
+        bool split = false;
+        for (const QString& suf : {QStringLiteral("_points"),
+                                   QStringLiteral("_lines"),
+                                   QStringLiteral("_polygons")}) {
+            if (base.endsWith(suf)) {
+                common = base.left(base.size() - suf.size());
+                split = true;
+                break;
+            }
+        }
+
+        if (!split)
+            return readShp(path);
+
+        // Teeno siblings (jo exist karti hain) ek saath load karo
+        QList<ShapeData> all;
+        for (const QString& suf : {QStringLiteral("_points"),
+                                   QStringLiteral("_lines"),
+                                   QStringLiteral("_polygons")}) {
+            const QString p = dir + "/" + common + suf + ".shp";
+            if (QFile::exists(p))
+                all.append(readShp(p));
+        }
+        return all;
+    }
 private:
     static void writeHeader(QDataStream& st, qint32 words, int type, double minX,double minY,double maxX,double maxY) {
         st.setByteOrder(QDataStream::BigEndian);
@@ -350,7 +508,7 @@ private:
         st<<(quint8)0x03;
         QDate d=QDate::currentDate();
         st<<(quint8)(d.year()-1900)<<(quint8)d.month()<<(quint8)d.day();
-        st<<(quint32)shapes.size()<<(quint16)(32+64+1)<<(quint16)(1+50+20);
+        st<<(quint32)shapes.size()<<(quint16)(32+3*32+1)<<(quint16)(1+50+20+9);
         for(int i=0;i<20;++i) st<<(quint8)0;
         auto field=[&](const char* n, char t, int len){
             QByteArray name=QByteArray(n).leftJustified(11,'\0',true);
@@ -358,13 +516,17 @@ private:
             st<<(quint8)t<<(quint32)0<<(quint8)len<<(quint8)0;
             for(int i=0;i<14;++i) st<<(quint8)0;
         };
-        field("NAME",'C',50); field("TYPE",'C',20); st<<(quint8)0x0D;
+        field("NAME",'C',50); field("TYPE",'C',20); field("COLOR",'C',9);
+        st<<(quint8)0x0D;
         for(const ShapeData& s:shapes){
             st<<(quint8)0x20;
             QByteArray name=(s.text.isEmpty()?s.type:s.text).toLatin1().leftJustified(50,' ',true);
             st.writeRawData(name.constData(),50);
             QByteArray type=s.type.toLatin1().leftJustified(20,' ',true);
             st.writeRawData(type.constData(),20);
+            QByteArray col=(s.color.isValid()?s.color.name():QStringLiteral("#ff0000"))
+                                 .toLatin1().leftJustified(9,' ',true);
+            st.writeRawData(col.constData(),9);
         }
         st<<(quint8)0x1A; return true;
     }
@@ -399,15 +561,31 @@ private:
         }
         writeDbf(base+".dbf", shapes); writePrj(base+".prj"); return true;
     }
-    static QStringList readDbfNames(const QString& path) {
-        QStringList names; QFile f(path); if(!f.open(QIODevice::ReadOnly)) return names;
-        QByteArray d=f.readAll(); if(d.size()<32) return names;
+    static void readDbfAttrs(const QString& path, QStringList& names,
+                             QStringList& types, QList<QColor>& colors) {
+        QFile f(path); if(!f.open(QIODevice::ReadOnly)) return;
+        QByteArray d=f.readAll(); if(d.size()<32) return;
         quint32 n=qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(d.constData()+4));
         quint16 hs=qFromLittleEndian<quint16>(reinterpret_cast<const uchar*>(d.constData()+8));
         quint16 rs=qFromLittleEndian<quint16>(reinterpret_cast<const uchar*>(d.constData()+10));
-        int nl=50; if(hs>32){ nl=(quint8)d[32+16]; if(nl<=0||nl>254) nl=50; }
-        for(quint32 i=0;i<n;++i){ int o=hs+int(i)*rs; if(o+1+nl>d.size()) break; names<<QString::fromLatin1(d.mid(o+1,nl)).trimmed(); }
-        return names;
+
+        int off=1, nameOff=-1, nameLen=0, typeOff=-1, typeLen=0, colOff=-1, colLen=0;
+        for(int p=32; p+32<=d.size() && p+32<=hs && (quint8)d[p]!=0x0D; p+=32){
+            QString fn=QString::fromLatin1(d.mid(p,11)).remove(QChar('\0')).trimmed().toUpper();
+            int len=(quint8)d[p+16];
+            if(fn=="NAME" || (nameOff<0 && p==32)){ nameOff=off; nameLen=len; }
+            else if(fn=="TYPE"){ typeOff=off; typeLen=len; }
+            else if(fn=="COLOR"){ colOff=off; colLen=len; }
+            off+=len;
+        }
+        for(quint32 i=0;i<n;++i){
+            int o=hs+int(i)*rs; if(o+rs>d.size()) break;
+            names << (nameOff>=0 ? QString::fromLatin1(d.mid(o+nameOff,nameLen)).trimmed() : QString());
+            types << (typeOff>=0 ? QString::fromLatin1(d.mid(o+typeOff,typeLen)).trimmed() : QString());
+            QColor c;
+            if(colOff>=0) c=QColor(QString::fromLatin1(d.mid(o+colOff,colLen)).trimmed());
+            colors << c;
+        }
     }
     static QList<ShapeData> readShp(const QString& path) {
         QList<ShapeData> result;
@@ -418,7 +596,11 @@ private:
         st.setByteOrder(QDataStream::LittleEndian);
         qint32 ver=0,stype=0; st>>ver>>stype;
         double a,b,c,d,e,g,h,i; st>>a>>b>>c>>d>>e>>g>>h>>i;
-        QStringList names=readDbfNames(QFileInfo(path).absolutePath()+"/"+QFileInfo(path).completeBaseName()+".dbf");
+
+        QStringList names, types; QList<QColor> colors;
+        readDbfAttrs(QFileInfo(path).absolutePath()+"/"+QFileInfo(path).completeBaseName()+".dbf",
+                     names, types, colors);
+
         int idx=0;
         while(!st.atEnd() && f.pos()+8<=f.size()){
             st.setByteOrder(QDataStream::BigEndian);
@@ -426,8 +608,14 @@ private:
             st.setByteOrder(QDataStream::LittleEndian);
             qint32 type=0; st>>type;
             ShapeData s; s.color=Qt::red; s.lineWidth=2;
-            if(idx<names.size()) s.text=names[idx];
-            if(type==1){ double x=0,y=0; st>>x>>y; s.type="point"; s.longitude=x; s.latitude=y; result.append(s); }
+            const QString typeStr = idx<types.size() ? types[idx] : QString();
+            if(idx<names.size() && (typeStr=="text" || names[idx]!=typeStr)) s.text=names[idx];
+            if(idx<colors.size() && colors[idx].isValid()) s.color=colors[idx];
+            if(type==1){
+                double x=0,y=0; st>>x>>y;
+                s.type=(typeStr=="text")?"text":"point";
+                s.longitude=x; s.latitude=y; result.append(s);
+            }
             else if(type==3||type==5){
                 double x0,y0,x1,y1; st>>x0>>y0>>x1>>y1;
                 qint32 np=0,npts=0; st>>np>>npts;
@@ -452,6 +640,8 @@ public:
     QString id() const override { return QStringLiteral("flatgeobuf"); }
     QString filter() const override { return QStringLiteral("FlatGeobuf (*.fgb)"); }
     QStringList extensions() const override { return {QStringLiteral("fgb")}; }
+    bool canExport() const override { return false; }
+    bool canImport() const override { return false; }
     bool exportShapes(const QList<ShapeData>&, const QString&) const override {
         qWarning() << "FlatGeobuf: register plugin with id flatgeobuf"; return false;
     }

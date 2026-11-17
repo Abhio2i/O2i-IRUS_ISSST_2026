@@ -15,11 +15,34 @@
 #include "core/Hierarchy/EntityProfiles/iff.h"
 #include <unordered_set>
 #include <QVector3D>
+#include <QSet>
+#include <cmath>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 const float RAD2DEG = 180.0f / M_PI;
+
+// Dropdown labels and serialized values: keep order aligned with IFFRole.
+static const std::string IFFRoleNames[3] = {
+    "Interrogator", "Responder", "Both"
+};
+static const std::string IFFModeNames[7] = {
+    "Mode1", "Mode2", "Mode3A", "ModeC", "Mode4", "Mode5", "ModeS"
+};
+
+static bool readOptionValue(const QJsonObject& object, const char* key, QString& value)
+{
+    if (!object.contains(key)) return false;
+    const QJsonValue v = object.value(key);
+    if (v.isString()) { value = v.toString(); return true; }
+    if (v.isObject()) {
+        const QJsonValue stored = v.toObject().value("value");
+        if (stored.isString()) { value = stored.toString(); return true; }
+    }
+    return false;
+}
+
 
 /**
  * @brief Constructs an IFF entity.
@@ -153,6 +176,55 @@ void IFF::updateComponent(QString name, const QJsonObject& obj) {
 
     if (obj.contains("lastInterrogationTime"))
         lastInterrogationTime = obj["lastInterrogationTime"].toString().toStdString();
+
+    // Flat updates; toJson()/fromJson() use the established "default" section.
+    if (obj.contains("interrogatorEnabled")) interrogatorEnabled = obj["interrogatorEnabled"].toBool();
+    if (obj.contains("replyFrequency")) replyFrequency = float(obj["replyFrequency"].toDouble());
+    if (obj.contains("activeIFFMode")) activeIFFMode = obj["activeIFFMode"].toString().toStdString();
+    if (obj.contains("enableMode1")) enableMode1 = obj["enableMode1"].toBool();
+    if (obj.contains("enableMode2")) enableMode2 = obj["enableMode2"].toBool();
+    if (obj.contains("enableMode3A")) enableMode3A = obj["enableMode3A"].toBool();
+    if (obj.contains("enableModeC")) enableModeC = obj["enableModeC"].toBool();
+    if (obj.contains("enableMode4")) enableMode4 = obj["enableMode4"].toBool();
+    if (obj.contains("enableMode5")) enableMode5 = obj["enableMode5"].toBool();
+    if (obj.contains("enableModeS")) enableModeS = obj["enableModeS"].toBool();
+    if (obj.contains("modeConfiguration") && obj["modeConfiguration"].isObject()) {
+        const auto cfg = obj["modeConfiguration"].toObject();
+        if (cfg.contains("mode5")) modeConfiguration.mode5 = cfg["mode5"].toString().toStdString();
+        if (cfg.contains("modeS")) modeConfiguration.modeS = cfg["modeS"].toString().toStdString();
+    }
+
+    // Existing updateComponent() accepts flat edits. Also accept the nested default section.
+    const QJsonObject roleSource = obj.value("default").isObject() ? obj.value("default").toObject() : obj;
+    QString requestedRole;
+    bool roleFound = readOptionValue(roleSource, "IFFRole", requestedRole);
+    bool validRole = false;
+    if (roleFound) {
+        for (int i = 0; i < 3; ++i) {
+            if (requestedRole.toStdString() == IFFRoleNames[i]) {
+                role = static_cast<IFFRole>(i);
+                validRole = true;
+                break;
+            }
+        }
+    }
+    if (validRole) {
+        interrogatorEnabled = role != IFFRole::Responder;
+        transponder = role != IFFRole::Interrogator;
+    } else if (roleSource.contains("interrogatorEnabled") || roleSource.contains("transponder")) {
+        // Compatibility with older saved configs using two booleans.
+        if (roleSource.contains("interrogatorEnabled")) interrogatorEnabled = roleSource.value("interrogatorEnabled").toBool();
+        if (roleSource.contains("transponder")) transponder = roleSource.value("transponder").toBool();
+        // Both false is treated as inactive (existing operationalMode / Active).
+        role = interrogatorEnabled && transponder ? IFFRole::Both
+               : interrogatorEnabled ? IFFRole::Interrogator : IFFRole::Responder;
+    }
+
+    QString chosenMode;
+    if (readOptionValue(roleSource, "activeIFFMode", chosenMode)) {
+        for (const auto& opt : IFFModeNames)
+            if (chosenMode.toStdString() == opt) { activeIFFMode = opt; break; }
+    }
 }
 
 /**
@@ -170,10 +242,52 @@ QJsonObject IFF::toJson() const {
 
     QJsonObject defaultObj;
     defaultObj["type"] = "Section";
-    defaultObj["transponder"] = transponder;
+    defaultObj["transponder"] = (role != IFFRole::Interrogator) && transponder;
     defaultObj["emittingRange"] = toParm(emittingRange,"km",  0,  500);
     defaultObj["emittingFrequency"] = toParm(emittingFrequency,"Mhz", 0,  3000);
     defaultObj["code"] = toParm(code,"code");
+    defaultObj["interrogatorEnabled"] = (role != IFFRole::Responder) && interrogatorEnabled;
+    defaultObj["replyFrequency"] = toParm(replyFrequency, "MHz", 0, 3000);
+
+    // Same option-schema as the existing Category dropdown in the project.
+    QJsonObject roleObj;
+    roleObj["type"] = "option";
+    roleObj["refresh"] = true;
+    roleObj["editable"] = false;
+    QJsonArray roleOptionsArray;
+    for (const std::string& opt : IFFRoleNames)
+        roleOptionsArray.append(QString::fromStdString(opt));
+    roleObj["options"] = roleOptionsArray;
+    roleObj["value"] = QString::fromStdString(IFFRoleNames[static_cast<int>(role)]);
+    defaultObj["IFFRole"] = roleObj;
+
+    QJsonObject modeOptionObj;
+    modeOptionObj["type"] = "option";
+    modeOptionObj["refresh"] = true;
+    modeOptionObj["editable"] = false;
+    QJsonArray modeOptionsArray;
+    for (const std::string& opt : IFFModeNames)
+        modeOptionsArray.append(QString::fromStdString(opt));
+    modeOptionObj["options"] = modeOptionsArray;
+    modeOptionObj["value"] = QString::fromStdString(activeIFFMode);
+    defaultObj["activeIFFMode"] = modeOptionObj;
+    defaultObj["enableMode1"] = enableMode1;
+    defaultObj["enableMode2"] = enableMode2;
+    defaultObj["enableMode3A"] = enableMode3A;
+    defaultObj["enableModeC"] = enableModeC;
+    defaultObj["enableMode4"] = enableMode4;
+    defaultObj["enableMode5"] = enableMode5;
+    defaultObj["enableModeS"] = enableModeS;
+    QJsonObject modeObj;
+    modeObj["type"] = "Section";
+    modeObj["mode1"] = QString::fromStdString(modeConfiguration.mode1);
+    modeObj["mode2"] = QString::fromStdString(modeConfiguration.mode2);
+    modeObj["mode3A"] = QString::fromStdString(modeConfiguration.mode3A);
+    modeObj["modeC"] = QString::fromStdString(modeConfiguration.modeC);
+    modeObj["mode4"] = QString::fromStdString(modeConfiguration.mode4);
+    modeObj["mode5"] = QString::fromStdString(modeConfiguration.mode5);
+    modeObj["modeS"] = QString::fromStdString(modeConfiguration.modeS);
+    obj["modeConfiguration"] = modeObj;
     obj["default"] = defaultObj;
 
     QJsonObject AddParameters = AdditionalParameters;
@@ -217,7 +331,7 @@ void IFF::fromJson(const QJsonObject& obj) {
     if (obj.contains("default") && obj["default"].isObject()) {
         QJsonObject defaultObj = obj["default"].toObject();
         if (defaultObj.contains("transponder"))
-            transponder = defaultObj["transponder"].isBool();
+            transponder = defaultObj["transponder"].toBool();
 
         if (defaultObj.contains("emittingRange"))
             emittingRange = valueFromParm(defaultObj["emittingRange"].toObject());
@@ -227,6 +341,53 @@ void IFF::fromJson(const QJsonObject& obj) {
 
         if (defaultObj.contains("code"))
             code = valueFromParm(defaultObj["code"].toObject());
+        // The booleans use the same direct-section convention as "transponder".
+        if (defaultObj.contains("interrogatorEnabled")) interrogatorEnabled = defaultObj["interrogatorEnabled"].toBool();
+        if (defaultObj.contains("replyFrequency")) replyFrequency = float(valueFromParm(defaultObj["replyFrequency"].toObject()));
+        QString selectedMode;
+        if (readOptionValue(defaultObj, "activeIFFMode", selectedMode)) {
+            for (const std::string& opt : IFFModeNames)
+                if (selectedMode.toStdString() == opt) { activeIFFMode = opt; break; }
+        }
+        if (defaultObj.contains("enableMode1")) enableMode1 = defaultObj["enableMode1"].toBool();
+        if (defaultObj.contains("enableMode2")) enableMode2 = defaultObj["enableMode2"].toBool();
+        if (defaultObj.contains("enableMode3A")) enableMode3A = defaultObj["enableMode3A"].toBool();
+        if (defaultObj.contains("enableModeC")) enableModeC = defaultObj["enableModeC"].toBool();
+        if (defaultObj.contains("enableMode4")) enableMode4 = defaultObj["enableMode4"].toBool();
+        if (defaultObj.contains("enableMode5")) enableMode5 = defaultObj["enableMode5"].toBool();
+        if (defaultObj.contains("enableModeS")) enableModeS = defaultObj["enableModeS"].toBool();
+
+        QString selectedRole;
+        bool validRole = false;
+        if (readOptionValue(defaultObj, "IFFRole", selectedRole)) {
+            for (int i = 0; i < 3; ++i) {
+                if (selectedRole.toStdString() == IFFRoleNames[i]) {
+                    role = static_cast<IFFRole>(i);
+                    validRole = true;
+                    break;
+                }
+            }
+        }
+        if (validRole) {
+            // Role takes precedence over legacy booleans.
+            interrogatorEnabled = role != IFFRole::Responder;
+            transponder = role != IFFRole::Interrogator;
+        } else {
+            // Old JSON files without IFFRole keep working.
+            role = interrogatorEnabled && transponder ? IFFRole::Both
+                   : interrogatorEnabled ? IFFRole::Interrogator : IFFRole::Responder;
+        }
+    }
+
+    if (obj.contains("modeConfiguration") && obj["modeConfiguration"].isObject()) {
+        const auto cfg = obj["modeConfiguration"].toObject();
+        if (cfg.contains("mode1")) modeConfiguration.mode1 = cfg["mode1"].toString().toStdString();
+        if (cfg.contains("mode2")) modeConfiguration.mode2 = cfg["mode2"].toString().toStdString();
+        if (cfg.contains("mode3A")) modeConfiguration.mode3A = cfg["mode3A"].toString().toStdString();
+        if (cfg.contains("modeC")) modeConfiguration.modeC = cfg["modeC"].toString().toStdString();
+        if (cfg.contains("mode4")) modeConfiguration.mode4 = cfg["mode4"].toString().toStdString();
+        if (cfg.contains("mode5")) modeConfiguration.mode5 = cfg["mode5"].toString().toStdString();
+        if (cfg.contains("modeS")) modeConfiguration.modeS = cfg["modeS"].toString().toStdString();
     }
 
     if(obj.contains("AdditionalParameters")){
@@ -237,123 +398,98 @@ void IFF::fromJson(const QJsonObject& obj) {
 /**
  * @brief Performs IFF scan to detect other IFF transponders within range.
  */
-// void IFF::scan(){
-//     if(!Active)return;
-//     if(!parentEntity) return;
-//     Transform* source = (root->Platforms)[parentEntity->ID]->transform;
-//     if(!source) return;
-
-//     for (auto& [key, entity] : root->Iffs)
-//     {
-//         if(!entity || !entity->parentEntity) continue;
-//         auto it = root->Platforms.find(entity->parentEntity->ID);
-//         if (it != root->Platforms.end()) {
-//             Platform* platform = it->second;
-//             if(platform->ID == parentEntity->ID || !platform || !platform->transform) continue;
-//             QVector3D localPos = source->inverseTransformPoint(platform->transform->matrix->translation());
-//             float metredis = distanceBetween(source->getLatitude(),source->getLongitude(),platform->transform->getLatitude(),platform->transform->getLongitude())/1000;
-
-//             // horizontal angle (Y axis) : x vs z
-//             float yAngle = std::atan2(localPos.x(), localPos.z()) * RAD2DEG;
-//             if (entity->Active && metredis < emittingRange && entity->emittingFrequency == emittingFrequency)
-//             {
-//                 if (detects.count(platform) == 0)
-//                 {
-//                     detects.insert(platform);
-//                     IFFTarget target;
-//                     target.entity = platform;
-//                     target.angle = yAngle;
-//                     target.ally = entity->code == code;
-//                     target.radius = metredis;
-//                     targets.append(target);
-//                 }else{
-//                     for (int i = 0; i < targets.size(); ++i) {
-//                         if (targets.at(i).entity == platform) {
-//                             targets[i].angle = yAngle;
-//                             targets[i].ally = entity->code == code;
-//                             targets[i].radius = metredis;
-//                             break;
-//                         }
-//                     }
-//                 }
-//             }
-//             else
-//             {
-//                 if (detects.count(platform) > 0)
-//                 {
-//                     for (int i = 0; i < targets.size(); ++i) {
-//                         if (targets.at(i).entity == platform) {
-//                             targets.removeAt(i);
-//                             break;
-//                         }
-//                     }
-//                     detects.erase(platform);
-//                 }
-//             }
-//         }
-//     }
-// }
-void IFF::scan(){
-    if(!Active)return;
-    if(!parentEntity) return;
-    Transform& source = (root->Platforms)[parentEntity->ID]->transform;
-    // if(!source) return;
-
-    for (auto& [key, entity] : root->Iffs)
-    {
-        if(!entity || !entity->parentEntity) continue;
-        auto it = root->Platforms.find(entity->parentEntity->ID);
-        if (it != root->Platforms.end()) {
-            Platform* platform = it->second;
-            if(platform->ID == parentEntity->ID || !platform /*|| !platform->transform*/) continue;
-            QVector3D localPos = source.inverseTransformPoint(platform->transform.matrix.translation());
-            float metredis = distanceBetween(source.getLatitude(),source.getLongitude(),platform->transform.getLatitude(),platform->transform.getLongitude())/1000;
-
-            // horizontal angle (Y axis) : x vs z
-            float yAngle = std::atan2(localPos.x(), localPos.z()) * RAD2DEG;
-            if (entity->Active && metredis < emittingRange && entity->emittingFrequency == emittingFrequency)
-            {
-                if (detects.count(platform) == 0)
-                {
-                    detects.insert(platform);
-                    IFFTarget target;
-                    target.entity = platform;
-                    target.angle = yAngle;
-                    target.ally = entity->code == code;
-                    target.radius = metredis;
-                    target.code = std::to_string(entity->code);
-                    target.status = target.ally ? 1 : 0;
-                    targets.append(target);
-                }else{
-                    for (int i = 0; i < targets.size(); ++i) {
-                        if (targets.at(i).entity == platform) {
-                            targets[i].angle = yAngle;
-                            targets[i].ally = entity->code == code;
-                            targets[i].radius = metredis;
-                            targets[i].code = std::to_string(entity->code);
-                            targets[i].status = targets[i].ally ? 1 : 0;
-                            break;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                if (detects.count(platform) > 0)
-                {
-                    for (int i = 0; i < targets.size(); ++i) {
-                        if (targets.at(i).entity == platform) {
-                            targets.removeAt(i);
-                            break;
-                        }
-                    }
-                    detects.erase(platform);
-                }
-            }
-        }
+void IFF::scan()
+{
+    // scan() is the existing simulation entry point; no external update calls needed.
+    if (!root || !parentEntity || !Active || !interrogatorEnabled ||
+        role == IFFRole::Responder ||
+        (operationalMode != OperationalMode::Active &&
+         operationalMode != OperationalMode::Simulation)) {
+        targets.clear();
+        iffTargets.clear();
+        detects.clear();
+        localIffSeen.clear();
+        return;
     }
-}
 
+    auto sourceIt = root->Platforms.find(parentEntity->ID);
+    if (sourceIt == root->Platforms.end() || !sourceIt->second) return;
+    Transform& source = sourceIt->second->transform;
+
+    QSet<Platform*> seenThisScan;
+    QJsonArray contactUpdates;
+    for (auto& [key, entity] : root->Iffs) {
+        if (!entity || entity == this || !entity->Active || !entity->transponder ||
+            entity->role == IFFRole::Interrogator ||
+            !entity->parentEntity) continue;
+        auto targetIt = root->Platforms.find(entity->parentEntity->ID);
+        if (targetIt == root->Platforms.end() || !targetIt->second) continue;
+        Platform* platform = targetIt->second;
+        if (platform == sourceIt->second || seenThisScan.contains(platform)) continue;
+
+        // Preserve the established GPS kilometre-distance convention.
+        const float rangeKm = distanceBetween(source.getLatitude(), source.getLongitude(),
+                                              platform->transform.getLatitude(), platform->transform.getLongitude()) / 1000.0f;
+        if (rangeKm > emittingRange || rangeKm > entity->emittingRange) continue;
+        // 1030 MHz interrogation / 1090 MHz reply are separate channels.
+        if (std::abs(emittingFrequency - 1030.0f) > 0.01f ||
+            std::abs(entity->replyFrequency - 1090.0f) > 0.01f) continue;
+
+        const IFFResponse response = entity->respondToInterrogation(this, rangeKm * 1000.0f);
+        if (!response.valid) continue;
+        seenThisScan.insert(platform);
+
+        const QVector3D localPos = source.inverseTransformPoint(platform->transform.matrix.translation());
+        float angle = std::atan2(localPos.x(), localPos.z()) * RAD2DEG;
+        if (angle < 0.0f) angle += 360.0f;
+
+        int index = -1;
+        for (int i = 0; i < targets.size(); ++i) {
+            if (targets[i].entity == platform) { index = i; break; }
+        }
+        IFFTarget t = (index >= 0) ? targets[index] : IFFTarget{};
+        t.entity = platform;
+        t.distance = rangeKm;
+        t.radius = rangeKm;
+        t.angle = angle;
+        t.responderId = response.responderId;
+        t.responderName = response.responderName;
+        t.mode = response.mode;
+        t.code = response.code;
+        t.authenticated = response.authenticated;
+        t.ally = t.authenticated;
+        t.status = t.ally ? 1 : 0; // 0 is unidentified, not proven hostile.
+        if (index >= 0) targets[index] = t;
+        else targets.append(t);
+
+        // Convert only at the existing UI signal boundary, not during interrogation.
+        QJsonObject contact;
+        contact["responderId"] = QString::fromStdString(response.responderId);
+        contact["responderName"] = QString::fromStdString(response.responderName);
+        contact["mode"] = QString::fromStdString(response.mode);
+        contact["code"] = QString::fromStdString(response.code);
+        contact["authenticated"] = response.authenticated;
+        contact["status"] = response.authenticated ? "Friend" : "Unknown";
+        contact["distanceMeters"] = response.distanceMeters;
+        contact["timestamp"] = QString::fromStdString(response.timestamp);
+        contact["distanceKm"] = rangeKm;
+        contact["angle"] = angle;
+        contactUpdates.append(contact);
+    }
+
+    // Drop stale/out-of-range/unresponsive contacts.
+    for (int i = targets.size() - 1; i >= 0; --i) {
+        if (!seenThisScan.contains(targets[i].entity)) targets.removeAt(i);
+    }
+    detects.clear();
+    localIffSeen.clear();
+    for (const IFFTarget& t : targets) {
+        detects.insert(t.entity);
+        localIffSeen.insert(t.responderId);
+    }
+    iffTargets = targets; // Keep older consumers in sync.
+    emit iffContactsUpdated(contactUpdates); // Empty array clears stale UI contacts.
+}
 /**
  * @brief Converts OperationalMode enum to string.
  * @param om Operational mode.
@@ -447,214 +583,79 @@ static std::string nowIsoString() {
  */
 void IFF::interrogateTargets(Transform* source)
 {
-    if (!transponder) {
-        return;
-    }
-
-    if (!(operationalMode == OperationalMode::Active || operationalMode == OperationalMode::Simulation)) {
-        return;
-    }
-
-    // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
-    // if (!parent) {
-    //     return;
-    // }
-
-    Platform* sourcePlatform = nullptr;
-    for (auto& [key, entity] : root->Platforms) {
-        if (Platform* plat = entity) {
-            for (IFF* iff : plat->iffList) {
-                if (iff == this) {
-                    sourcePlatform = plat;
-                    break;
-                }
-            }
-            if (sourcePlatform) break;
-        }
-    }
-
-    QJsonArray responsesArray;
-    float range_m = (emittingRange > 0.0f) ? emittingRange : 5.0f;
-
-    // ================================
-    //   CLEANUP OUT-OF-RANGE TARGETS
-    // ================================
-    for (int i = iffTargets.size() - 1; i >= 0; --i) {
-        IFFTarget &t = iffTargets[i];
-        if (!t.entity /*|| !t.entity->transform*/ /*|| !t.entity->transform.matrix*/) {
-            localIffSeen.erase(t.responderId);
-            iffTargets.removeAt(i);
-            continue;
-        }
-
-        QVector3D localPos = source->inverseTransformPoint(t.entity->transform.matrix.translation());
-        float dist = localPos.length();
-
-        if (dist > range_m) {
-            localIffSeen.erase(t.responderId);
-            iffTargets.removeAt(i);
-        }
-    }
-
-    // ======================================
-    //   MAIN INTERROGATION LOOP
-    // ======================================
-    for (auto& [key, entity] : root->Platforms) {
-        Platform* platform = entity;
-        if (!platform || platform == sourcePlatform || platform->iffList.empty()) continue;
-        // if (/*!platform->transform || *//*!platform->transform.matrix*/) continue;
-        bool anyTransponderOn = false;
-        for (IFF* other : platform->iffList) {
-            if (other && other->transponder) { anyTransponderOn = true; break; }
-        }
-        if (!anyTransponderOn) continue;
-        QVector3D localPos = source->inverseTransformPoint(platform->transform.matrix.translation());
-        float distance = localPos.length();
-        float metredis = distanceBetween(
-                             source->translation().x(), source->translation().z(),
-                             platform->transform.matrix.translation().x(), platform->transform.matrix.translation().z()
-                             ) / 1000;
-
-        if (distance > range_m)
-            continue;
-        bool responded = false;
-        for (IFF* other : platform->iffList) {
-            if (!other || !other->transponder) continue;
-            if (!(other->operationalMode == OperationalMode::Active ||
-                  other->operationalMode == OperationalMode::Passive ||
-                  other->operationalMode == OperationalMode::Simulation))
-                continue;
-            if (responded) continue;
-            QJsonObject resp = other->respondToInterrogation(this, distance);
-            if (resp.isEmpty()) continue;
-            responded = true;
-            std::string uid = resp["responderId"].toString().toStdString();
-
-            // =========================
-            // NEW TARGET
-            // =========================
-            if (localIffSeen.find(uid) == localIffSeen.end()) {
-                localIffSeen.insert(uid);
-
-                float angle = std::atan2(localPos.x(), localPos.z()) * RAD2DEG;
-                if (angle < 0.0f) angle += 360.0f;
-                int status = (resp["status"].toString().compare("friend", Qt::CaseInsensitive) == 0) ? 1 : 0;
-
-                IFFTarget tgt;
-                tgt.distance      = metredis;
-                tgt.radius        = metredis;
-                tgt.angle         = angle;
-                tgt.responderId   = uid;
-                tgt.responderName = resp["responderName"].toString().toStdString();
-                tgt.status        = status;
-                tgt.mode          = resp["mode"].toString().toStdString();
-                tgt.code          = resp["code"].toString().toStdString();
-                tgt.entity        = platform;
-
-                // Avoid duplicates
-                bool exists = false;
-                for (const IFFTarget& t : iffTargets)
-                    if (t.responderId == uid) { exists = true; break; }
-
-                if (!exists) iffTargets.append(tgt);
-            }
-            else {
-                // =========================
-                // UPDATED EXISTING TARGET
-                // =========================
-                for (int i = 0; i < iffTargets.size(); ++i) {
-                    IFFTarget &target = iffTargets[i];
-                    if (target.responderId != uid) continue;
-
-                    // --- ALWAYS UPDATE POSITION (movement per frame) ---
-                    float angle = std::atan2(localPos.x(), localPos.z()) * RAD2DEG;
-                    if (angle < 0.0f) angle += 360.0f;
-
-                    target.distance = metredis;
-                    target.radius   = metredis;
-                    target.angle    = angle;
-
-                    // --- NEW IDENTITY DATA FROM RESPONSE ---
-                    int newStatus = (resp["status"].toString().compare("friend", Qt::CaseInsensitive) == 0) ? 1 : 0;
-                    std::string newMode = resp["mode"].toString().toStdString();
-                    std::string newCode = resp["code"].toString().toStdString();
-
-                    // Check for identity change
-                    bool changed =
-                        target.status != newStatus ||
-                        target.mode   != newMode   ||
-                        target.code   != newCode;
-
-                    if (changed) {
-                        target.status = newStatus;
-                        target.mode   = newMode;
-                        target.code   = newCode;
-
-                        QJsonArray arr;
-                        emit iffContactsUpdated(arr);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!responsesArray.isEmpty())
-        emit iffContactsUpdated(responsesArray);
+    Q_UNUSED(source);
+    scan(); // Retain the existing API, but scan() owns all updates.
 }
 
 /**
- * @brief Responds to an IFF interrogation.
- * @param interrogator The IFF entity that sent the interrogation.
- * @param distanceMeters Distance to the interrogator.
- * @return JSON object containing response data.
+ * @brief Produces an allocation-light typed response to a simulated IFF interrogation.
+ * @param interrogator Source IFF entity.
+ * @param distanceMeters Distance from interrogator to responder in metres.
+ * @return A struct with valid=false if no reply is available.
  */
-QJsonObject IFF::respondToInterrogation(IFF* interrogator, float distanceMeters)
+IFF::IFFResponse IFF::respondToInterrogation(IFF* interrogator, float distanceMeters)
 {
-    QJsonObject result;
+    IFFResponse result{};
+    if (!interrogator || !Active || !transponder ||
+        role == IFFRole::Interrogator ||
+        (operationalMode != OperationalMode::Active &&
+         operationalMode != OperationalMode::Passive &&
+         operationalMode != OperationalMode::Simulation)) return result;
 
-    if (!transponder) return result;
-
-    if (!(operationalMode == OperationalMode::Active ||
-          operationalMode == OperationalMode::Passive ||
-          operationalMode == OperationalMode::Simulation))
+    if (distanceMeters < 0.0f || distanceMeters > emittingRange * 1000.0f)
         return result;
 
-    QString modeStr = "Unknown";
-    QString codeStr = "0000";
-    QString status = "Unknown";
+    const std::string& mode = interrogator->activeIFFMode;
+    const std::string* responseCode = nullptr;
+    bool enabled = false;
+    bool authenticated = false;
 
-    if (interrogator) {
-        const auto& intrMode = interrogator->modeConfiguration;
-
-        bool mode3AMatch = !modeConfiguration.mode3A.empty() && !intrMode.mode3A.empty() &&
-                           modeConfiguration.mode3A == intrMode.mode3A;
-        bool mode4Match = !modeConfiguration.mode4.empty() && !intrMode.mode4.empty() &&
-                          modeConfiguration.mode4 == intrMode.mode4;
-
-        if ((modeConfiguration.mode3A.empty() || mode3AMatch) &&
-            (modeConfiguration.mode4.empty() || mode4Match)) {
-
-            if (mode3AMatch) {
-                modeStr = "Mode3A";
-                codeStr = modeConfiguration.mode3A.c_str();
-            } else if (mode4Match) {
-                modeStr = "Mode4";
-                codeStr = modeConfiguration.mode4.c_str();
-            }
-            status = "Friend";
-        }
+    if (mode == "Mode1") {
+        enabled = enableMode1 && interrogator->enableMode1;
+        responseCode = &modeConfiguration.mode1;
+    } else if (mode == "Mode2") {
+        enabled = enableMode2 && interrogator->enableMode2;
+        responseCode = &modeConfiguration.mode2;
+    } else if (mode == "Mode3A") {
+        enabled = enableMode3A && interrogator->enableMode3A;
+        responseCode = &modeConfiguration.mode3A;
+    } else if (mode == "ModeC") {
+        enabled = enableModeC && interrogator->enableModeC;
+        responseCode = &modeConfiguration.modeC;
+    } else if (mode == "ModeS") {
+        enabled = enableModeS && interrogator->enableModeS;
+        responseCode = &modeConfiguration.modeS;
+    } else if (mode == "Mode4") {
+        enabled = enableMode4 && interrogator->enableMode4;
+        responseCode = &modeConfiguration.mode4;
+        authenticated = enabled && !responseCode->empty() &&
+                        *responseCode == interrogator->modeConfiguration.mode4;
+    } else if (mode == "Mode5") {
+        enabled = enableMode5 && interrogator->enableMode5;
+        responseCode = &modeConfiguration.mode5;
+        authenticated = enabled && !responseCode->empty() &&
+                        *responseCode == interrogator->modeConfiguration.mode5;
     }
-    lastInterrogationTime = nowIsoString();
 
-    // Add message to local history
+    if (!enabled || !responseCode) return result;
+
+    result.valid = true;
+    result.interrogatorId = interrogator->ID;
+    result.interrogatorName = interrogator->Name;
+    result.responderId = ID;
+    result.responderName = Name;
+    result.mode = mode;
+    result.code = *responseCode;
+    result.authenticated = authenticated;
+    result.distanceMeters = distanceMeters;
+    lastInterrogationTime = nowIsoString();
+    result.timestamp = lastInterrogationTime;
+
     Message msg;
-    msg.timeStamp = nowIsoString();
-    msg.source = interrogator ? interrogator->Name : "Unknown";
-    msg.destination = this->Name;
-    msg.content = "Responded with status: " + status.toStdString() +
-                  ", Mode: " + modeStr.toStdString() +
-                  ", Code: " + codeStr.toStdString();
+    msg.timeStamp = lastInterrogationTime;
+    msg.source = interrogator->Name;
+    msg.destination = Name;
+    msg.content = "IFF response " + mode;
     messages.push_back(msg);
     return result;
 }

@@ -16,6 +16,12 @@
 #include <QtMath>
 #include <cmath>
 
+//Added by Vansh
+#include <QEvent>
+#include <QLabel>
+#include <QResizeEvent>
+//Vansh
+
 namespace {
 
 const QColor kBg(6, 10, 7);
@@ -52,6 +58,39 @@ ESMPpiWidget::ESMPpiWidget(ESMObservationModel* model, QWidget* parent)
 {
     setMouseTracking(true);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    //Vansh added
+    // Persistent observation information card.
+    pinnedInfoLabel_ = new QLabel(this);
+
+    pinnedInfoLabel_->setObjectName(
+        QStringLiteral("esmPinnedInfo"));
+
+    pinnedInfoLabel_->setWordWrap(true);
+    pinnedInfoLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    pinnedInfoLabel_->setMargin(8);
+
+    pinnedInfoLabel_->setStyleSheet(
+        QStringLiteral(
+            "QLabel#esmPinnedInfo {"
+            "background-color: rgba(3, 18, 8, 235);"
+            "color: #b5f0c4;"
+            "border: 1px solid #1fa04a;"
+            "font-size: 10px;"
+            "}"
+            )
+        );
+
+    pinnedInfoLabel_->setAttribute(
+        Qt::WA_TransparentForMouseEvents, true);
+
+    pinnedInfoLabel_->hide();
+
+    // Monitor clicks outside the PPI.
+    // if (qApp)
+    //     qApp->installEventFilter(this);
+    //Vansh
+
     if (model_)
         connect(model_, &ESMObservationModel::observationsChanged,
                 this, &ESMPpiWidget::onModelChanged);
@@ -71,13 +110,52 @@ void ESMPpiWidget::setSelectedKey(const QString& key)
     if (selectedKey_ == key)
         return;
     selectedKey_ = key;
+
+    //Added by Vansh
+    updatePinnedInfo();
+    //Vansh
+
     update();
 }
+
+//Vansh added helper function
+void ESMPpiWidget::updatePinnedInfo()
+{
+    if (!pinnedInfoLabel_)
+        return;
+
+    const int row = model_
+                        ? model_->rowForKey(selectedKey_)
+                        : -1;
+
+    // No valid selection: hide the information card.
+    if (selectedKey_.isEmpty() || row < 0) {
+        pinnedInfoLabel_->hide();
+        return;
+    }
+
+    // Keep the card within the PPI widget.
+    const int cardWidth = qBound(180, width() - 24, 300);
+
+    pinnedInfoLabel_->setFixedWidth(cardWidth);
+    pinnedInfoLabel_->setText(model_->detailText(row));
+    pinnedInfoLabel_->adjustSize();
+
+    pinnedInfoLabel_->move(12, 12);
+    pinnedInfoLabel_->raise();
+    pinnedInfoLabel_->show();
+}
+//Vansh
 
 void ESMPpiWidget::onModelChanged()
 {
     hovered_ = -1;
     QToolTip::hideText();
+
+    //Vansh added
+    // Refresh or hide the pinned observation details.
+    updatePinnedInfo();
+
     update();
 }
 
@@ -294,7 +372,16 @@ void ESMPpiWidget::mouseMoveEvent(QMouseEvent* event)
     }
     if (idx >= 0 && model_) {
         setCursor(Qt::PointingHandCursor);
-        QToolTip::showText(mapToGlobal(pos + QPoint(14, 14)), model_->detailText(idx), this);
+        // QToolTip::showText(mapToGlobal(pos + QPoint(14, 14)), model_->detailText(idx), this);
+
+        //Vansh
+        if(selectedKey_.isEmpty()) {
+            QToolTip::showText(mapToGlobal(pos + QPoint(14, 14)), model_->detailText(idx), this, QRect(), 5000);
+            //Vansh
+        }else{
+            QToolTip::hideText();
+        }
+        //Vansh
     } else {
         unsetCursor();
         QToolTip::hideText();
@@ -321,3 +408,34 @@ void ESMPpiWidget::leaveEvent(QEvent* event)
     update();
     QWidget::leaveEvent(event);
 }
+
+//Vansh added resized information card
+void ESMPpiWidget::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    updatePinnedInfo();
+}
+//Vansh
+
+//Vansh added outside click handling
+// bool ESMPpiWidget::eventFilter(QObject* watched, QEvent* event)
+// {
+//     if (event && event->type() == QEvent::MouseButtonPress) {
+
+//         QWidget* clickedWidget = qobject_cast<QWidget*>(watched);
+
+//         const bool clickInsidePpi =
+//             clickedWidget &&
+//             (clickedWidget == this || isAncestorOf(clickedWidget));
+
+//         if (!clickInsidePpi && !selectedKey_.isEmpty()) {
+
+//             setSelectedKey(QString());
+
+//             emit observationSelected(QString());
+//         }
+//     }
+
+//     return QWidget::eventFilter(watched, event);
+// }
+//Vansh

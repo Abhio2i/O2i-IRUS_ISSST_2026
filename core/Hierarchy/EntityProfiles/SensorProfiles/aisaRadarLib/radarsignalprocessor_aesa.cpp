@@ -2163,8 +2163,10 @@ void RadarSignalProcessor_AESA::computeMonopulseAngleError(
     thread_local std::normal_distribution<double> nd(0.0, 1.0);
 
     // Systematic bias term: azDiff / km^2 (pointing correction). REQ-AESA-040.
-    outAzError_deg = azDiff_deg / (MONOPULSE_KM * MONOPULSE_KM) + sig * nd(tl_rng);
-    outElError_deg = elDiff_deg / (MONOPULSE_KM * MONOPULSE_KM) + sig * nd(tl_rng);
+    // outAzError_deg = azDiff_deg / (MONOPULSE_KM * MONOPULSE_KM) + sig * nd(tl_rng);
+    // outElError_deg = elDiff_deg / (MONOPULSE_KM * MONOPULSE_KM) + sig * nd(tl_rng);
+    outAzError_deg = sig * nd(tl_rng);
+    outElError_deg = sig * nd(tl_rng);
 }
 
 // =============================================================================

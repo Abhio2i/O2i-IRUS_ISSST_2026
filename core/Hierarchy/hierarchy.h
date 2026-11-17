@@ -78,6 +78,9 @@ public:
     std::unordered_map<std::string, std::list<std::string>> dictionry;
     std::unordered_map<std::string, Folder*> Folders;
     std::unordered_map<std::string, Entity*> Entities;
+    void updateJammingDisplaySuppression();   //!< once per frame, from Simulation
+    void clearJammingDisplaySuppression();    //!< un-hide everything
+    int  jamSuppressedCount_ = 0;
     std::unordered_map<std::string, Platform*> Platforms;
     std::unordered_map<std::string, Radio*> Radios;
     std::unordered_map<std::string, Sensor*> Sensors;
@@ -95,7 +98,7 @@ public:
     std::unordered_map<std::string, std::string*> EntityPaths;
     std::unordered_map<std::string, std::string*> FolderPaths;
 
-    static inline QStringList* sensorlist = new QStringList({/*"Generic", */"CSM", "ESM", "EO", "IR", "Sonar", "AIS", "ADSB", "AESA" });
+    static inline QStringList* sensorlist = new QStringList({"Generic","CSM", "ESM", "EO", "IR", "Sonar", "AIS", "ADSB", "AESA" });
     QStringList getAvailableSensorTypes() const;
     bool registerNewSensor(std::string name);
     bool unregisterNewSensor(std::string name);
@@ -114,9 +117,9 @@ public:
     QStringList getAvailableDynamicTypes() const;
     bool registerNewDynamic(std::string name);
     bool unregisterNewDynamic(std::string name);
-
-
+    bool itemExists(const QString& type, const QString& ID, const QString& parentId = QString()) const;
     ECS::World world;
+
 signals:
     void getCustomSensor(QString entityID,uint32_t ecsID,QString sensorID,CustomSensorInterface *&sensor);
     void RemoveCustomSensor(QString entityID,uint32_t ecsID,QString sensorID);

@@ -7,15 +7,68 @@
 #include "core/Hierarchy/EntityProfiles/radio.h"
 #include "qapplication.h"
 #include "qthread.h"
-#include "sharedMemory.h"
-#include "EntityHandler.h"
+#include "sharedMemorylib/sharedMemory.h"
+#include "sharedMemorylib/EntityHandler.h"
 #include <csignal>
 #include <iostream>
 #include <core/Debug/console.h>
+#include <cmath>
+#include <cstring>
+#include <iterator>
+#include <unordered_set>
+#include "core/Hierarchy/Utils/entityutils.h"
+#include <core/Config/scenarioconfig.h>
+namespace {
+constexpr double AESA_DEG2RAD         = 3.14159265358979323846 / 180.0;
+constexpr double AESA_ACC_TAU_S       = 1.0;   // acceleration smoothing (s)
+constexpr int    AESA_ACC_MIN_UPDATES = 3;     // updates before acceleration is valid
+constexpr double AESA_PRUNE_S         = 5.0;   // drop accel state unseen this long (s)
+constexpr double AESA_ACC_MIN_DT_S    = 1.0;   // minimum time between velocity samples (s)
 
+template <size_t N>
+void copyStr(char (&dst)[N], const std::string& src)
+{
+    std::strncpy(dst, src.c_str(), N - 1);
+    dst[N - 1] = '\0';
+}
+
+int aesaModeToInt(aesa::RadarMode m)
+{
+    switch (m) {
+    case aesa::RadarMode::SURVEILLANCE: return 0;
+    case aesa::RadarMode::TWS:          return 1;
+    case aesa::RadarMode::LOCK_ON:      return 2;
+    }
+    return 0;
+}
+
+const aesa::BeamWaveform& aesaWaveformFor(const aesa::RadarConfig& cfg, aesa::RadarMode m)
+{
+    switch (m) {
+    case aesa::RadarMode::LOCK_ON: return cfg.fireControlWaveform;
+    case aesa::RadarMode::TWS:     return cfg.trackWaveform;
+    default:                       return cfg.searchWaveform;
+    }
+}
+// Radar offset (stabilised frame: North, East, Up in metres) -> lat/lon,
+// with the engine's own flat-Earth conversion (same as Transform).
+// Engine world: x = East, y = Up, z = North (km). Reverse of collectTargets().
+void aesaOffsetToLatLon(const QVector3D& ownPosKm, double north_m, double east_m,
+                        double up_m, double& lat, double& lon)
+{
+    const double xKm = ownPosKm.x() + east_m  / 1000.0;
+    const double yKm = ownPosKm.y() + up_m    / 1000.0;
+    const double zKm = ownPosKm.z() + north_m / 1000.0;
+    const GeoPos g   = flatXYZToGeo(xKm, yKm * KMtoFT, zKm);
+    lat = g.lat;
+    lon = g.lon;
+}
+} // namespace
 SharedMemoryWrapper::SharedMemoryWrapper() {
     shm.create();
     handler = shm.entityHandler;
+    std::cout << "[SHM] Entity size: " << sizeof(SharedStructs::Entity)
+              << "  SharedData size: " << sizeof(SharedStructs::SharedData) << std::endl;
     // handler->addEntity(SharedStructs::Entity()); // Ek dummy entity add karein
     // std::cout << "Program running... Press Ctrl+C to stop." << std::endl;
 
@@ -57,6 +110,7 @@ void SharedMemoryWrapper::entityAdded(QString /*parentID*/, Entity* entity) {
         component.dynamicModel = &platform->dynamicModel;
         component.trajectory = &platform->trajectory;
         sharedComponent[platform->ID] = component;
+        radarIdToEntity_[AESARadar::platformToRadarID(platform->ID)] = platform->ID;
         SharedStructs::Entity sharedEntity{};
         sharedEntity.setID(entity->ID.c_str());
         sharedEntity.setName(entity->Name.c_str());
@@ -68,21 +122,31 @@ void SharedMemoryWrapper::entityRemoved(QString ID) {
     std::string key = ID.toStdString();
     auto physIt = sharedComponent.find(key);
     if (physIt != sharedComponent.end()) {
+        radarIdToEntity_.erase(AESARadar::platformToRadarID(key));
         handler->removeEntityByID(ID.toStdString());
         sharedComponent.erase(physIt);
     }
 }
 
 void SharedMemoryWrapper::SimulationUpdate(float deltaTime){
-    return;
+    //return;
+    if(ScenarioConfig::sharedData){
+        // qDebug()<<"share";
     for (auto& [id, comp] : sharedComponent) {
         SharedStructs::Entity* entity = handler->getEntityByID(id);
+        if (!entity) continue;
         updateTransformData(comp,entity);
         updateDynamicData(comp,entity);
         updateTrajectoryData(comp,entity);
         updateSensorData(comp,entity);
         updateRadioData(comp,entity);
+        updateAESAData(comp,entity);
     }
+    }
+
+    for (auto it = aesaAccel_.begin(); it != aesaAccel_.end(); )
+        it = (std::abs(aesaClock_ - it->second.lastSeen) > AESA_PRUNE_S)
+                 ? aesaAccel_.erase(it) : std::next(it);
 }
 
 void SharedMemoryWrapper::updateTransformData(SharedComponent comp,SharedStructs::Entity* entity){
@@ -211,6 +275,7 @@ void SharedMemoryWrapper::updateSensorData(SharedComponent comp, SharedStructs::
             if (!r) {  continue; }   // guard: skip if cast fails
 
             for(auto const& ais : r->detect ){
+                if (ais.entity)entity->ais[aisDataCount].setID(ais.entity->ID.c_str());
                 entity->ais[aisDataCount].mmsi = ais.mmsi;
                 entity->ais[aisDataCount].imo_number = ais.imo_number;
                 entity->ais[aisDataCount].setName(ais.name);
@@ -239,7 +304,9 @@ void SharedMemoryWrapper::updateSensorData(SharedComponent comp, SharedStructs::
                 entity->ais[aisDataCount].repeat_indicator = ais.repeat_indicator;
                 entity->ais[aisDataCount].ais_channel = ais.ais_channel;
                 entity->ais[aisDataCount].is_verified = ais.is_verified;
-
+                entity->ais[aisDataCount].Maneuver_Indicator = 2;
+                entity->ais[aisDataCount].radio_status = 1;
+                entity->ais[aisDataCount].positionAccuracy = ais.positionAccuracy;
                 aisDataCount++;
             }
         }
@@ -281,6 +348,13 @@ void SharedMemoryWrapper::updateSensorData(SharedComponent comp, SharedStructs::
                     dst.emergency        = adsb.emergency;
                     dst.spi              = adsb.spi;
                     dst.is_on_ground     = adsb.is_on_ground;
+                    dst.emitter_category = adsb.emitter_category;
+                    dst.vx = adsb.vx;
+                    dst.vy = adsb.vy;
+                    dst.vz = adsb.vz;
+                    dst.ax = adsb.ax;
+                    dst.ay = adsb.ay;
+                    dst.az = adsb.az;
 
                     adsbDataCount++;
                 }
@@ -354,85 +428,226 @@ void SharedMemoryWrapper::updateRadioData(SharedComponent comp, SharedStructs::E
 
 }
 
+// =============================================================================
+// Acceleration from change of Kalman velocity between track updates.
+// =============================================================================
+bool SharedMemoryWrapper::aesaAcceleration(const std::string& key, const double v[3],
+                                           int hitCount, bool validated, double now, double a[3])
+{
+    AesaAccelState& s = aesaAccel_[key];
 
-// void SharedMemoryWrapper::updateSensorData(SharedComponent comp, SharedStructs::Entity* entity)
-// {
-//     int i           = 0;
-//     int sensorcount = 0;
+    if (!validated || !s.hasV || now < s.t)
+    {
+        s = AesaAccelState{};
+        for (int i = 0; i < 3; ++i) { s.v[i] = v[i]; a[i] = 0.0; }
+        s.t = now; s.hits = hitCount; s.hasV = validated; s.lastSeen = now;
+        return false;
+    }
 
-//     for (auto const& pair :comp.platform->sensors.sensors)
-//     {
-//         Sensor* s = pair.second;
-//         if (!s) continue;
+    if (hitCount != s.hits && (now - s.t) >= AESA_ACC_MIN_DT_S)    {
+        const double dt   = now - s.t;
+        const double beta = dt / (AESA_ACC_TAU_S + dt);
+        for (int i = 0; i < 3; ++i)
+        {
+            const double raw = (v[i] - s.v[i]) / dt;
+            s.a[i] += beta * (raw - s.a[i]);
+            s.v[i]  = v[i];
+        }
+        s.t = now; s.hits = hitCount; ++s.updates;
+    }
+    s.lastSeen = now;
 
-//         if (s->subType == Sensor::SubType::Generic && i < 4)
-//         {
-//             sensorcount++;
+    for (int i = 0; i < 3; ++i) a[i] = s.a[i];
+    return s.updates >= AESA_ACC_MIN_UPDATES;
+}
 
-//             Radar* r = dynamic_cast<Radar*>(s);
-//             if (!r) { i++; continue; }   // guard: skip if cast fails
+// =============================================================================
+// AESA radar -> shared memory (same pattern as AIS / ADS-B).
+// =============================================================================
+void SharedMemoryWrapper::updateAESAData(SharedComponent comp, SharedStructs::Entity* entity)
+{
+    if (!comp.platform) return;
 
-//             // ------------------------------------------------------------------
-//             // Radar configuration — read from RadarConfig (single source of truth)
-//             //
-//             // ALIGNMENT NOTE (radarmodel refactor):
-//             //   RadarAttributes  →  RadarConfig  (type rename only)
-//             //
-//             //   Three fields that existed in RadarAttributes were removed from
-//             //   RadarConfig because they were never read by any physics function:
-//             //     scanningNumHits  →  not in RadarConfig, send 0 (harmless default)
-//             //     scanTime0        →  not in RadarConfig, send 0.0f
-//             //     scanTime1        →  not in RadarConfig, send 0.0f
-//             //
-//             //   All other fields map 1-to-1 with identical names and types.
-//             // ------------------------------------------------------------------
-//             RadarConfig cfg = r->getRadarConfig();
+    int radarCount   = 0;
+    int contactCount = 0;
+    const int maxRadars   = static_cast<int>(std::size(entity->aesaRadar));
+    const int maxContacts = static_cast<int>(std::size(entity->aesaContact));
+    const double now = static_cast<double>(comp.platform->time);
+    aesaClock_ = now;
+    const QVector3D ownPosKm = comp.transform->translation();   // same as the radar uses
 
-//             entity->sensors[i].sensorType       = 0;
-//             entity->sensors[i].power            = static_cast<float>(cfg.emissionPower_kW);
-//             entity->sensors[i].frequency        = static_cast<float>(cfg.frequency_Hz / 1e9); // Hz → GHz
-//             entity->sensors[i].minAzimuth       = cfg.minAzimuth;
-//             entity->sensors[i].maxAzimuth       = cfg.maxAzimuth;
-//             entity->sensors[i].minElevation     = cfg.minElevation;
-//             entity->sensors[i].maxElevation     = cfg.maxElevation;
-//             entity->sensors[i].rate             = cfg.scanningRate_RPM;
-//             entity->sensors[i].hits             = 0.0f;   // scanningNumHits removed from RadarConfig
-//             entity->sensors[i].AntennaGain      = cfg.antennaGain;
-//             entity->sensors[i].AntennaBandwidth = static_cast<float>(cfg.antennaBandwidth);
-//             entity->sensors[i].beamWidth        = cfg.beamWidth;
-//             entity->sensors[i].scanType         = static_cast<int>(cfg.scanType);
-//             entity->sensors[i].scanTime1        = 0.0f;   // scanTime0 removed from RadarConfig
-//             entity->sensors[i].scanTime2        = 0.0f;   // scanTime1 removed from RadarConfig
-//             entity->sensors[i].peakSideLobLevel = cfg.peakSidelobeLevel;
-//             entity->sensors[i].avgSideLobLevel  = cfg.avgSidelobeLevel;
-//             entity->sensors[i].pulseWidth       = cfg.pulseWidth;
+    for (auto const& pair : comp.platform->sensors.sensors)
+    {
+        Sensor* s = pair.second;
+        if (!s || s->subType != Sensor::SubType::AESA) continue;
+        if (radarCount >= maxRadars) break;
+        AESARadar* r = dynamic_cast<AESARadar*>(s);
+        if (!r) continue;
 
-//             // ------------------------------------------------------------------
-//             // Tracked targets — capped at 19
-//             // ------------------------------------------------------------------
-//             int trgtcount = static_cast<int>(r->targets.size());
-//             trgtcount     = trgtcount > 19 ? 19 : trgtcount;
+        const aesa::RadarOutput   out = r->getRadarOutput();
+        const aesa::RadarConfig   cfg = r->getRadarConfig();
+        const aesa::BeamWaveform& wf  = aesaWaveformFor(cfg, out.mode);
 
-//             for (int k = 0; k < trgtcount; ++k)
-//             {
-//                 const Target& tgt = r->targets[k];
+        // ---------- radar block ----------
+        const int rIdx = radarCount++;
+        auto& sys = entity->aesaRadar[rIdx];
+        sys = SharedStructs::AESARadarData{};
+        copyStr(sys.radarId,   r->ID);
+        copyStr(sys.radarName, r->Name);
+        sys.emitterIndex          = r->emitterIndex;
+        sys.mode                  = aesaModeToInt(out.mode);
+        sys.lockedTargetId        = cfg.lockedTargetID;
+        sys.simTime_s             = now;
+        sys.beamAz_deg            = r->getCurrentAzimuth();
+        sys.beamEl_deg            = r->getCurrentElevation();
+        sys.frequency_Hz          = cfg.frequency_Hz;
+        sys.receiverBandwidth_Hz  = cfg.antennaBandwidth;
+        sys.antennaGain_dBi       = cfg.antennaGain;
+        sys.beamWidth_deg         = cfg.beamWidth;
+        sys.pulseWidth_s          = wf.pulseWidth_s;
+        sys.prf_Hz                = wf.prf_Hz;
+        sys.prf2_Hz               = wf.prf2_Hz;
+        sys.waveformBandwidth_Hz  = wf.bandwidth_Hz;
+        sys.dutyCycle             = out.currentDutyCycle;
+        sys.maxDutyCycle          = cfg.maxDutyCycle;
+        sys.displayRange_km       = out.displayRange_km;
+        sys.minAzimuth_deg        = cfg.minAzimuth;
+        sys.maxAzimuth_deg        = cfg.maxAzimuth;
+        sys.minElevation_deg      = cfg.minElevation;
+        sys.maxElevation_deg      = cfg.maxElevation;
+        sys.mountAzimuth_deg      = r->mountAzimuth();
+        sys.mountElevation_deg    = r->mountElevation();
+        sys.numElements           = cfg.numElements;
+        sys.failedModules         = cfg.failedModules;
+        sys.peakPowerPerElement_W = cfg.peakPowerPerElement_W;
+        sys.noiseFigure_dB        = cfg.noiseFigure_dB;
+        sys.targetPfa             = cfg.targetPfa;
+        sys.frequencyAgility      = cfg.frequencyAgility ? 1 : 0;
+        sys.hopStart_Hz           = cfg.hopStartFrequency;
+        sys.hopStop_Hz            = cfg.hopStopFrequency;
+        sys.radarHeight_m         = cfg.radarHeight;
+        sys.platformSpeed_m_s     = cfg.platformSpeed_m_s;
 
-//                 // Guard: skip if entity or transform is null
-//                 if (!tgt.entity /*|| !tgt.entity->transform*/) continue;
+        int radarContacts = 0;
 
-//                 entity->sensors[i].trackedTargets[k].latitude  = tgt.entity->transform.getLatitude();
-//                 entity->sensors[i].trackedTargets[k].longitude = tgt.entity->transform.getLongitude();
-//                 entity->sensors[i].trackedTargets[k].altitude  = tgt.entity->transform.getAltitude();
-//                 entity->sensors[i].trackedTargets[k].speed     = tgt.speed;
-//                 entity->sensors[i].trackedTargets[k].distance  = tgt.radius;
-//                 entity->sensors[i].trackedTargets[k].bearing   = tgt.angle;
-//             }
+        auto setEntityId = [this](SharedStructs::AESAContactData& c, uint32_t id) {
+            auto it = radarIdToEntity_.find(id);
+            if (it != radarIdToEntity_.end()) copyStr(c.targetEntityId, it->second);
+        };
 
-//             entity->sensors[i].trackedTargetCount = trgtcount;
-//             i++;
-//         }
-//     }
+        // ---------- SURVEILLANCE: detections ----------
+        if (out.mode == aesa::RadarMode::SURVEILLANCE)
+        {
+            std::unordered_set<uint32_t> added;
+            for (const auto& d : out.detections)
+            {
+                if (contactCount >= maxContacts) break;
+                if (d.isDRFMGhost) continue;
+                if (!added.insert(d.targetID).second) continue;
 
-//     sensorcount         = sensorcount > 4 ? 4 : sensorcount;
-//     entity->sensorCount = sensorcount;
-// }
+                auto& c = entity->aesaContact[contactCount++];
+                c = SharedStructs::AESAContactData{};
+                c.radarIndex = rIdx;
+                c.targetId   = d.targetID;
+                c.source     = 0;
+                setEntityId(c, d.targetID);
+
+                const double h = d.heading * AESA_DEG2RAD;
+                c.PR_vel_n_s  = d.speedOverGround * std::cos(h);
+                c.PR_vel_e_w  = d.speedOverGround * std::sin(h);
+                c.PR_vel_vert = 0.0;
+                c.velSource   = 2;
+                c.PR_rcs      = d.rcs_m2;
+                c.rcsValid    = (d.rcs_m2 > 0.0) ? 1 : 0;
+
+                c.range_m             = d.range;
+                c.azimuth_deg         = d.azimuth;
+                c.elevation_deg       = d.elevation;
+                c.altitude_m          = d.range * std::sin(d.elevation * AESA_DEG2RAD) + cfg.radarHeight;
+                const double azR   = d.azimuth   * AESA_DEG2RAD;
+                const double elR   = d.elevation * AESA_DEG2RAD;
+                const double horiz = d.range * std::cos(elR);
+                aesaOffsetToLatLon(ownPosKm, horiz * std::cos(azR), horiz * std::sin(azR),
+                                   d.range * std::sin(elR), c.lat_deg, c.lon_deg);
+                c.speedOverGround_m_s = d.speedOverGround;
+                c.heading_deg         = d.heading;
+                c.radialVelocity_m_s  = d.radialVelocity;
+                c.snr_linear          = d.snr;
+                c.snr_dB              = (d.snr > 0.0) ? 10.0 * std::log10(d.snr) : -999.0;
+                c.Pk                  = d.Pk;
+                c.cpa_distance_m      = d.cpa_distance;
+                c.time_to_cpa_s       = d.time_to_cpa;
+                c.targetAspect_deg    = d.targetAspect;
+                c.ambiguous           = d.isAmbiguous ? 1 : 0;
+                c.inDopplerBlind      = d.inDopplerBlind ? 1 : 0;
+                ++radarContacts;
+            }
+        }
+        // ---------- TWS / LOCK_ON: tracks ----------
+        else
+        {
+            const bool lockOn = (out.mode == aesa::RadarMode::LOCK_ON);
+            if (!(lockOn && out.lockBroken))
+            {
+                for (const auto& tr : out.tracks)
+                {
+                    if (contactCount >= maxContacts) break;
+                    if (tr.isDRFMSuspect) continue;
+                    if (lockOn && tr.id != cfg.lockedTargetID) continue;
+
+                    auto& c = entity->aesaContact[contactCount++];
+                    c = SharedStructs::AESAContactData{};
+                    c.radarIndex = rIdx;
+                    c.targetId   = tr.id;
+                    c.source     = lockOn ? 2 : 1;
+                    setEntityId(c, tr.id);
+
+                    c.PR_vel_n_s  = tr.vx;   // North
+                    c.PR_vel_e_w  = tr.vy;   // East
+                    c.PR_vel_vert = tr.vz;   // Up
+                    c.velSource   = 1;
+                    c.PR_rcs      = tr.rcs_m2;
+                    c.rcsValid    = (tr.rcs_m2 > 0.0) ? 1 : 0;
+
+                    const double v[3] = { tr.vx, tr.vy, tr.vz };
+                    double a[3] = { 0.0, 0.0, 0.0 };
+                    const std::string key = r->ID + ":" + std::to_string(tr.id);
+                    if (aesaAcceleration(key, v, tr.hitCount, tr.isValidated, now, a))
+                    {
+                        c.PR_acc_n_s  = a[0];
+                        c.acc_e_w     = a[1];
+                        c.PR_acc_vert = a[2];
+                        c.accValid    = 1;
+                    }
+
+                    c.range_m             = tr.range;
+                    c.azimuth_deg         = tr.azimuth;
+                    c.elevation_deg       = tr.elevation;
+                    c.altitude_m          = tr.z + cfg.radarHeight;
+                    aesaOffsetToLatLon(ownPosKm, tr.x, tr.y, tr.z, c.lat_deg, c.lon_deg);
+                    c.speedOverGround_m_s = tr.speedOverGround;
+                    c.heading_deg         = tr.heading;
+                    c.radialVelocity_m_s  = tr.radialVelocity;
+                    c.Pk                  = tr.Pk;
+                    c.cpa_distance_m      = tr.cpa_distance;
+                    c.time_to_cpa_s       = tr.time_to_cpa;
+                    c.targetAspect_deg    = tr.targetAspect;
+                    c.validated           = tr.isValidated ? 1 : 0;
+                    c.manoeuvring         = tr.isManoeuvring ? 1 : 0;
+                    c.externalTrack       = tr.isExternalTrack ? 1 : 0;
+                    c.ambiguous           = tr.wasAmbiguous ? 1 : 0;
+                    c.hitCount            = tr.hitCount;
+                    c.trackQuality        = tr.trackQuality;
+                    c.iffResponse         = static_cast<int32_t>(tr.iff.response);
+                    c.iffSquawk           = tr.iff.squawk;
+                    c.iffConfidence       = tr.iff.confidence;
+                    ++radarContacts;
+                }
+            }
+        }
+        sys.contactCount = radarContacts;
+    }
+
+    entity->aesaRadarCount   = radarCount;
+    entity->aesaContactCount = contactCount;
+}

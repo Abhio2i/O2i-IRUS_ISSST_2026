@@ -632,6 +632,7 @@ void RadarTracker_AESA::performKalmanUpdate(
     tr.isUpdated          = tr.updatedThisScan = true;
     tr.missCount          = 0;
     tr.wasAmbiguous       = det.isAmbiguous;
+    if (det.rcs_m2 > 0.0) tr.rcs_m2 = det.rcs_m2;
     if (tr.hitCount >= cfg.minHitsToValidate) tr.isValidated = true;
 
     // Track quality: product of hit density and non-miss density, clamped to
@@ -959,6 +960,13 @@ void RadarTracker_AESA::performJPDAUpdate(
         for (int j = 0; j < nD; ++j)
             if (gate[j]) beta[j] = e_ij[j] / (1.0 + sumE);
 
+
+        // Mean RCS from the most probable associated detection. REQ-AESA-040.
+        int jBest = -1;
+        for (int j = 0; j < nD; ++j)
+            if (gate[j] && dets[j].rcs_m2 > 0.0 &&
+                (jBest < 0 || beta[j] > beta[jBest])) jBest = j;
+        if (jBest >= 0) tr.rcs_m2 = dets[jBest].rcs_m2;
         // -----------------------------------------------------------------
         // Stage 3: Kalman gain K = P · H^T · S^{-1}. REQ-AESA-023.
         // -----------------------------------------------------------------
@@ -1154,6 +1162,7 @@ void RadarTracker_AESA::createNewTrack(
     tr.updatedThisScan = true;
     tr.wasAmbiguous   = det.isAmbiguous;
     tr.isDRFMSuspect  = det.isDRFMGhost;
+    tr.rcs_m2         = det.rcs_m2;
 
     // Capacity guard — erase oldest entry before inserting if at limit.
     // REQ-AESA-020.
@@ -1289,6 +1298,7 @@ static void fillCommon(TrackOutput& o, const TrackFile& t, const double ownV[3])
     o.isDRFMSuspect  = t.isDRFMSuspect;
     o.isExternalTrack = t.isExternalTrack;
     o.iff            = t.iff;
+    o.rcs_m2         = t.rcs_m2;
 
     // Use current (updated) range if the track was updated this cycle, otherwise
     // use the Kalman-predicted range. REQ-AESA-026.

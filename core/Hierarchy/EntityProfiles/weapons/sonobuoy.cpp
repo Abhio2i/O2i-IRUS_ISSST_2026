@@ -2,7 +2,6 @@
 #include "core/Hierarchy/ECS/Struct/Meta_Data_Component.h"
 #include "core/Hierarchy/Utils/entityutils.h"
 #include "core/Hierarchy/hierarchy.h"
-#include "core/Simulation/simulation.h"
 
 const float RAD2DEG = 180.0f / M_PI;
 
@@ -35,19 +34,164 @@ Sonobuoy::~Sonobuoy(){
 
 void Sonobuoy::SaveState(){
     /*if(transform)*/transform.SaveState();
-    /*if(trajectory)*/trajectory.SaveState();
-    /*if(dynamicModel)*/dynamicModel.SaveState();
+    // /*if(trajectory)*/trajectory.SaveState();
+    // /*if(dynamicModel)*/dynamicModel.SaveState();
 
     InitalState["active"] = Active;
     InitalState["drop"] = drop;
 }
 void Sonobuoy::RestoreState(){
     /*if(transform)*/transform.RestoreState();
-    /*if(trajectory)*/trajectory.RestoreState();
-    /*if(dynamicModel)*/dynamicModel.RestoreState();
+    // /*if(trajectory)*/trajectory.RestoreState();
+    // /*if(dynamicModel)*/dynamicModel.RestoreState();
     fromJson(InitalState);
 }
 
+void Sonobuoy::spawn()
+{
+    emit root->entityAdded(QString::fromStdString(parentID), QString::fromStdString(ID), QString::fromStdString(Name));
+    emit root->entityAddedPointer(QString::fromStdString(parentID),this);
+}
+
+std::vector<std::string> Sonobuoy::getSupportedComponents()
+{
+    std::vector<std::string> supported;
+    supported.push_back("transform");
+    supported.push_back("collider");
+    supported.push_back("bitmap");
+    return supported;
+}
+
+void Sonobuoy::addSupportedcomponent()
+{
+    for (const auto& item : getSupportedComponents()) {
+        addComponent(item.c_str());
+        qDebug() << item.c_str(); // Ya std::cout << item << std::endl;
+    }
+}
+
+void Sonobuoy::addComponent(std::string name)
+{
+    if (!root)
+        return;
+
+    // ============================================================
+    // Transform
+    // ============================================================
+
+    if (name == "transform")
+    {
+        if (root->Components.find(transform.ID) !=
+            root->Components.end())
+        {
+            return;
+        }
+
+        transform.init(this);
+
+        root->Components.insert({
+            transform.ID,
+            &transform
+        });
+
+        emit root->componentAdded(
+            QString::fromStdString(ID),
+            QString::fromStdString(transform.ID),
+            "transform"
+            );
+    }
+    else if (name == "collider")
+    {
+        if (root->Components.find(collider.ID) !=
+            root->Components.end())
+        {
+            return;
+        }
+
+        collider.init(this);
+        collider.parentID = ID;
+
+        root->Components.insert({
+            collider.ID,
+            &collider
+        });
+
+        emit root->componentAdded(
+            QString::fromStdString(ID),
+            QString::fromStdString(collider.ID),
+            "collider"
+            );
+    }
+    else if (name == "bitmap")
+    {
+        if (root->Components.find(meshRenderer2d.ID) !=
+            root->Components.end())
+        {
+            return;
+        }
+
+        meshRenderer2d.init(this);
+
+        root->Components.insert({
+            meshRenderer2d.ID,
+            &meshRenderer2d
+        });
+
+        emit root->componentAdded(
+            QString::fromStdString(ID),
+            QString::fromStdString(meshRenderer2d.ID),
+            "bitmap"
+            );
+
+        emit root->entityMeshAdded(
+            QString::fromStdString(parentID),
+            this
+            );
+    }
+}
+
+void Sonobuoy::removeComponent(std::string name)
+{
+    if(!root)return;
+    if (name == "transform") {
+        // if (!transform) return;
+        root->Components.erase(transform.ID);
+        // delete transform;
+        // transform = nullptr;
+        emit root->componentRemoved(QString::fromStdString(ID), "transform");
+        emit root->entityMeshRemoved(QString::fromStdString(parentID));
+        emit root->entityPhysicsRemoved(QString::fromStdString(parentID));
+    }
+    else if (name == "collider") {
+        // if (!collider) return;
+        root->Components.erase(collider.ID);
+        // delete collider;
+        // collider = nullptr;
+        emit root->componentRemoved(QString::fromStdString(ID), "collider");
+        emit root->entityMeshRemoved(QString::fromStdString(parentID));
+        emit root->entityPhysicsRemoved(QString::fromStdString(parentID));
+    }
+    else if (name == "bitmap") {
+        // if (!meshRenderer2d) return;
+        root->Components.erase(meshRenderer2d.ID);
+        // delete meshRenderer2d;
+        // meshRenderer2d = nullptr;
+        emit root->componentRemoved(QString::fromStdString(ID), "bitmap");
+        emit root->entityMeshRemoved(QString::fromStdString(parentID));
+    }
+}
+
+QJsonObject Sonobuoy::getComponent(std::string name)
+{
+    Q_UNUSED(name);
+    return QJsonObject();
+}
+
+void Sonobuoy::updateComponent(QString name, const QJsonObject& obj)
+{
+    Q_UNUSED(name);
+    Q_UNUSED(obj);
+}
 
 void Sonobuoy::dropped(){
     drop = true;
@@ -155,7 +299,10 @@ QJsonObject Sonobuoy::toJson() const
     obj["drop"] = drop;
     obj["name"] = QString::fromStdString(Name);
     obj["id"] = QString::fromStdString(ID);
-    obj["weaponTypeName"]     = "Sunobuoy";
+
+    obj["weaponType"] = getWeaponTypeObj();
+
+
     QJsonObject defaultObj;
     defaultObj["type"] = "Section";
     defaultObj["range"] = toParm(range,"km",0, 120);
@@ -164,13 +311,9 @@ QJsonObject Sonobuoy::toJson() const
     defaultObj["Life"] = toParm(Life,"h", 1, 100);
     obj["default"] = defaultObj;
 
-    /*if (transform)  */    obj["transform"]    = transform.toJson();
-    /*if (rigidbody)  */    obj["rigidbody"]    = rigidbody.toJson();
-    /*if (collider)    */   obj["collider"]     = collider.toJson();
-    /*if (trajectory)   */  obj["trajectory"]   = trajectory.toJson();
-    /*if (meshRenderer2d) */obj["bitmap"]       = meshRenderer2d.toJson();
-    /*if (dynamicModel) */  obj["dynamicModel"] = dynamicModel.toJson();
-    /*if (crossSection)  */ obj["crossSection"] = crossSection.toJson();
+    obj["transform"]    = transform.toJson();
+    obj["collider"]     = collider.toJson();
+    obj["bitmap"]       = meshRenderer2d.toJson();
     QJsonObject AddParameters = AdditionalParameters;
     AddParameters["type"] = "Section";
     obj["AdditionalParameters"] = AddParameters;
@@ -193,6 +336,11 @@ void Sonobuoy::fromJson(const QJsonObject& obj)
     if (obj.contains("active"))
         Active = obj["active"].toBool();
 
+    if (obj.contains("weaponType") && obj["weaponType"].isObject()) {
+        setWeaponTypeObj(obj["weaponType"].toObject());
+    }
+
+
     if (obj.contains("drop"))
         drop = obj["drop"].toBool();
 
@@ -214,12 +362,12 @@ void Sonobuoy::fromJson(const QJsonObject& obj)
     }
     // 7 auto-components
     if (obj.contains("transform")    /*&& transform*/)     transform.fromJson(obj["transform"].toObject());
-    if (obj.contains("rigidbody")    /*&& rigidbody*/)     rigidbody.fromJson(obj["rigidbody"].toObject());
+    // if (obj.contains("rigidbody")    /*&& rigidbody*/)     rigidbody.fromJson(obj["rigidbody"].toObject());
     if (obj.contains("collider")     /*&& collider*/)      collider.fromJson(obj["collider"].toObject());
-    if (obj.contains("trajectory")   /*&& trajectory*/)    trajectory.fromJson(obj["trajectory"].toObject());
+    // if (obj.contains("trajectory")   /*&& trajectory*/)    trajectory.fromJson(obj["trajectory"].toObject());
     if (obj.contains("bitmap")       /*&& meshRenderer2d*/) meshRenderer2d.fromJson(obj["bitmap"].toObject());
-    if (obj.contains("dynamicModel") /*&& dynamicModel*/)  dynamicModel.fromJson(obj["dynamicModel"].toObject());
-    if (obj.contains("crossSection") /*&& crossSection*/)  crossSection.fromJson(obj["crossSection"].toObject());
+    // if (obj.contains("dynamicModel") /*&& dynamicModel*/)  dynamicModel.fromJson(obj["dynamicModel"].toObject());
+    // if (obj.contains("crossSection") /*&& crossSection*/)  crossSection.fromJson(obj["crossSection"].toObject());
 
     if(obj.contains("AdditionalParameters")){
         AdditionalParameters = obj["AdditionalParameters"].toObject();

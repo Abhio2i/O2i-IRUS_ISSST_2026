@@ -183,11 +183,9 @@ void DesignToolBar::createActions() {
                         activeLayers.append(orderedLayer);
                     }
                 }
-
                 // Emit the properly ordered active layers
                 emit mapLayerChanged(activeLayers.join(","));
             });
-
             break;
         }
     }
@@ -218,6 +216,14 @@ void DesignToolBar::createActions() {
     connect(rotateAction, &QAction::triggered, this, [=]() {
         highlightAction(rotateAction);
         emit modeChanged(Rotate);
+    });
+    scaleAction = new QAction(QIcon(withWhiteBg(":/icons/images/scale.png")), // or any existing icon
+                              tr("Scale"), this);
+    scaleAction->setCheckable(true);
+    scaleAction->setShortcut(QKeySequence(Qt::Key_4));
+    connect(scaleAction, &QAction::triggered, this, [=]() {
+        highlightAction(scaleAction);
+        emit modeChanged(Scale);
     });
     // Main zoom in action
     zoomInAction = new QAction(QIcon(withWhiteBg(":/icons/images/zoom-in.png")), tr("Zoom In"), this);
@@ -311,7 +317,7 @@ void DesignToolBar::createActions() {
     tooltipAction->setCheckable(true);
     tooltipAction->setChecked(false);
     colliderAction->setCheckable(true);
-    colliderAction->setChecked(true);
+    colliderAction->setChecked(false);
     // meshAction->setCheckable(true);
     // meshAction->setChecked(true);
     // outlineAction->setCheckable(true);
@@ -488,7 +494,7 @@ void DesignToolBar::createActions() {
     connect(drawLineAction, &QAction::triggered, this, [=]() {
         highlightAction(shapeAction);
         emit shapeSelected("Line");
-    });
+    } );
     connect(drawCircleAction, &QAction::triggered, this, [=]() {
         highlightAction(shapeAction);
         emit shapeSelected("Circle");
@@ -664,7 +670,6 @@ void DesignToolBar::createActions() {
     // Main search menu setup with coordinate parsing
     QMenu* searchMenu = new QMenu(this);
     searchMenu->setStyleSheet(DesignToolbarStyles::Menu);
-
     QWidgetAction* searchAction = new QWidgetAction(this);
     QLineEdit* searchInput = new QLineEdit();
     searchInput->setPlaceholderText("Enter coordinates (lat,lon)...");
@@ -739,6 +744,7 @@ void DesignToolBar::setupToolBar()
     addAction(viewAction);
     addAction(moveAction);
     addAction(rotateAction);
+    addAction(scaleAction);
     // addSeparator();
 
     // Layer and trajectory section
@@ -849,6 +855,10 @@ void DesignToolBar::onModeChanged(TransformMode mode) {
     case Rotate:
         rotateAction->setChecked(true);
         highlightAction(rotateAction);
+        break;
+    case Scale:
+        scaleAction->setChecked(true);
+        highlightAction(scaleAction);
         break;
     case DrawTrajectory:
         editTrajectoryAction->setChecked(true);

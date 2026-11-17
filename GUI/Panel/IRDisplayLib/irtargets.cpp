@@ -86,43 +86,58 @@ IRTargets::TargetAsset* IRTargets::getAsset(const QString& objPath, const QStrin
 void IRTargets::render(const QMatrix4x4 &projection, const QMatrix4x4 &cameraMatrix,
                        float tx, float ty, float tz,
                        const QQuaternion &rotation,
-                       const QString &modelPath, const QString &texturePath)
+                       const QString &modelPath, const QString &texturePath,
+                       Entity::Category category)
 {
-    // Check if telemetry paths are empty. If so, substitute defaults natively.
-    QString finalModel = modelPath.isEmpty() ? defaultModel3d : modelPath;
-    QString finalTex = texturePath.isEmpty() ? defaultTexture : texturePath;
+    QString finalModel = modelPath;
+    QString finalTex   = texturePath;
 
-    // Grab asset from cache
+    if (finalModel.isEmpty() || finalTex.isEmpty()) {
+        switch (category) {
+        case Entity::Category::Ground:
+            if (finalModel.isEmpty()) finalModel = defaultGroundModel3d;
+            if (finalTex.isEmpty())   finalTex   = defaultGroundTexture;
+            break;
+        case Entity::Category::Marine:
+            if (finalModel.isEmpty()) finalModel = defaultMarineModel3d;
+            if (finalTex.isEmpty())   finalTex   = defaultMarineTexture;
+            break;
+        case Entity::Category::Air:
+        default:
+            if (finalModel.isEmpty()) finalModel = defaultModel3d;
+            if (finalTex.isEmpty())   finalTex   = defaultTexture;
+            break;
+        }
+    }
+
+    if (finalModel.isEmpty()) {
+        qDebug() << "IRTargets: no model path for category" << int(category);
+        return;
+    }
+    if (finalTex.isEmpty())
+        finalTex = defaultTexture;
+
     TargetAsset* asset = getAsset(finalModel, finalTex);
-    if (!asset || asset->vertexCount == 0) return; // Skip if loading failed entirely
+    if (!asset || asset->vertexCount == 0) return;
 
     QMatrix4x4 airplaneMatrix = cameraMatrix;
-
     airplaneMatrix.translate(tx, ty, tz);
     airplaneMatrix.rotate(rotation);
-
-    // Model orientation fixes
     airplaneMatrix.rotate(90.0f, 0.0f, 1.0f, 0.0f);
     airplaneMatrix.rotate(-90.0f, 1.0f, 0.0f, 0.0f);
-    airplaneMatrix.scale(0.02f);
+    airplaneMatrix.scale(0.03f);
 
-    // --- Draw ---
     program.bind();
     program.setUniformValue("mvpMatrix", projection * airplaneMatrix);
-
     glActiveTexture(GL_TEXTURE0);
-    if (asset->texture) {
+    if (asset->texture)
         asset->texture->bind();
-    }
     program.setUniformValue("textureSampler", 0);
-
     asset->vao->bind();
     glDrawArrays(GL_TRIANGLES, 0, asset->vertexCount);
     asset->vao->release();
-
-    if (asset->texture) {
+    if (asset->texture)
         asset->texture->release();
-    }
     program.release();
 }
 

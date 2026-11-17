@@ -284,7 +284,6 @@ private:
         return s[0].toUpper() + s.mid(1);
     }
 
-
     // %%% Custom Parameter Section Tracking %%%
     QPushButton  *addButton                = nullptr;
     int           m_additionalParamsHeaderRow = -1;

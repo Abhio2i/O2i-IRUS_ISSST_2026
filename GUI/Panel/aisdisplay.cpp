@@ -242,7 +242,7 @@ void AISDisplay::paintEvent(QPaintEvent * /*event*/)
                 // --- Ship Shape Drawing ---
             p.save(); // Coordinate system save karein
             p.translate(tx, ty); // Painter ko ship ki position par le jayein
-            p.rotate(t.angle); // Ship ko uske original angle par rotate karein
+            p.rotate(t.heading); // Ship ko uske original angle par rotate karein
 
             // Hover color set karein
             if (i == hoveredTargetIndex) {
@@ -282,24 +282,24 @@ void AISDisplay::paintEvent(QPaintEvent * /*event*/)
                 // 1. Strings prepare karein (Formatting)
                 QString angleText = QString("Angle: %1°").arg(angleDeg, 0, 'f', 1);
                 QString distText  = QString("Dist: %1km").arg(t.radius, 0, 'f', 1);
-                QString nameText  = QString("Name: %1").arg(t.name);
-                QString mmsiText  = QString("MMSI: %1").arg(t.mmsi);
-                QString imoText   = QString("IMO: %1").arg(t.imo_number);
+                // QString nameText  = QString("Name: %1").arg(t.name);
+                // QString mmsiText  = QString("MMSI: %1").arg(t.mmsi);
+                // QString imoText   = QString("IMO: %1").arg(t.imo_number);
                 QString speedText = QString("SOG: %1 kn").arg(t.sog, 0, 'f', 1);
                 QString cogText   = QString("COG: %1°").arg(t.cog, 0, 'f', 1);
                 QString posText   = QString("Pos: %1, %2").arg(t.pos.latitude, 0, 'f', 4).arg(t.pos.longitude, 0, 'f', 4);
                 QString dimText   = QString("Dim: %1m x %2m").arg(t.dims.length).arg(t.dims.beam);
                 QString destText  = QString("Dest: %1").arg(t.destination);
-                QString etaText   = QString("ETA: %1/%2 %3:%4").arg(t.eta.day).arg(t.eta.month).arg(t.eta.hour).arg(t.eta.minute);
+                // QString etaText   = QString("ETA: %1/%2 %3:%4").arg(t.eta.day).arg(t.eta.month).arg(t.eta.hour).arg(t.eta.minute);
 
                 // 2. Draw Text (Y-axis offset badhate rahein)
                 int xOff = tx + 10; // X-axis offset
                 int yOff = ty - 10; // Shuruati Y position
                 int step = 15;      // Line spacing (pixel mein)
 
-                p.drawText(xOff, yOff,          nameText);
-                p.drawText(xOff, yOff += step,  mmsiText);
-                p.drawText(xOff, yOff += step,  imoText);
+                // p.drawText(xOff, yOff,          nameText);
+                // p.drawText(xOff, yOff += step,  mmsiText);
+                // p.drawText(xOff, yOff += step,  imoText);
                 p.drawText(xOff, yOff += step,  angleText);
                 p.drawText(xOff, yOff += step,  distText);
                 p.drawText(xOff, yOff += step,  posText);
@@ -307,7 +307,7 @@ void AISDisplay::paintEvent(QPaintEvent * /*event*/)
                 p.drawText(xOff, yOff += step,  cogText);
                 p.drawText(xOff, yOff += step,  dimText);
                 p.drawText(xOff, yOff += step,  destText);
-                p.drawText(xOff, yOff += step,  etaText);
+                // p.drawText(xOff, yOff += step,  etaText);
             }
             i++;
         }

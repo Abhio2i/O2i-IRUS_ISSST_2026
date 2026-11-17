@@ -154,9 +154,49 @@ void RADIODisplay::leaveEvent(QEvent *event)
 
 // %%% Entity Management %%%
 /* Select entity for radio display */
+// void RADIODisplay::selectEntity(Entity* entit)
+// {
+//     // Cast to Platform type
+//     Platform* platform = dynamic_cast<Platform*>(entit);
+//     if (!platform) {
+//         Console::error("Entity is not a Platform");
+//         update();
+//         return;
+//     }
+
+//     // Set entity ID and pointer
+//     id = QString::fromStdString(platform->ID);
+//     entity = platform;
+
+//     // Select first valid Radio from entity
+//     radio = nullptr;
+//     radiolist.clear();
+//     // if (/*!entity->radios ||*/ !entity->radios.radios) {
+//     //     update();
+//     //     return;
+//     // }
+//     for (auto const& pair :  entity->radios.radios) {
+//         Radio* r = pair.second;
+//         if (r) {
+//             if(radio==nullptr){
+//                 radio = r;
+//             }
+//             radiolist.append(r);
+//             setWindowTitle("RADIO Display (" + QString::fromStdString(entity->Name) + ")");
+
+//         }
+//     }
+
+//     // Reset hover state when entity changes
+//     hoveredTargetIndex = -1;
+//     updateDropdown();
+//     update();
+// }
+
+
+
 void RADIODisplay::selectEntity(Entity* entit)
 {
-    // Cast to Platform type
     Platform* platform = dynamic_cast<Platform*>(entit);
     if (!platform) {
         Console::error("Entity is not a Platform");
@@ -164,34 +204,38 @@ void RADIODisplay::selectEntity(Entity* entit)
         return;
     }
 
-    // Set entity ID and pointer
     id = QString::fromStdString(platform->ID);
     entity = platform;
-
-    // Select first valid Radio from entity
     radio = nullptr;
     radiolist.clear();
-    // if (/*!entity->radios ||*/ !entity->radios.radios) {
-    //     update();
-    //     return;
-    // }
-    for (auto const& pair :  entity->radios.radios) {
-        Radio* r = pair.second;
-        if (r) {
-            if(radio==nullptr){
-                radio = r;
-            }
-            radiolist.append(r);
-            setWindowTitle("RADIO Display (" + QString::fromStdString(entity->Name) + ")");
+    setWindowTitle("RADIO Display (" + QString::fromStdString(entity->Name) + ")");
 
-        }
-    }
+    rebuildVisibleRadios();          // jam-suppressed radios are not listed
 
-    // Reset hover state when entity changes
     hoveredTargetIndex = -1;
     updateDropdown();
     update();
 }
+bool RADIODisplay::rebuildVisibleRadios()
+{
+    QVector<Radio*> fresh;
+    if (entity) {
+        for (auto const& pair : entity->radios.radios) {
+            Radio* r = pair.second;
+            if (r && !r->isDisplaySuppressed()) fresh.append(r);
+        }
+    }
+    bool changed = (fresh != radiolist);
+    radiolist = fresh;
+    if (!radiolist.contains(radio)) {            // selected radio gone/hidden
+        radio = radiolist.isEmpty() ? nullptr : radiolist.first();
+        hoveredTargetIndex = -1;
+        changed = true;
+    }
+    return changed;
+}
+
+
 
 /* Remove entity from display */
 /* Remove entity from display */
@@ -217,6 +261,27 @@ void RADIODisplay::RemoveEntity(QString ID)
 
 // %%% Update Methods %%%
 /* Update radar display with current radio data */
+// void RADIODisplay::updateRadar()
+// {
+//     if (entity && radio) {
+//         bool stillValid = false;
+//         for (auto const& pair : entity->radios.radios) {
+//             if (pair.second == radio) { stillValid = true; break; }
+//         }
+//         if (!stillValid) radio = nullptr;
+//     }
+
+//     if (entity && radio) {
+//         setRange(radio->Range);
+//         update();
+//     } else {
+//         targets.clear();
+//         hoveredTargetIndex = -1;
+//     }
+// }
+
+
+
 void RADIODisplay::updateRadar()
 {
     if (entity && radio) {
@@ -227,17 +292,124 @@ void RADIODisplay::updateRadar()
         if (!stillValid) radio = nullptr;
     }
 
+    // Pick up jam on/off every tick: hidden radios leave the list, freed ones return.
+    if (entity && rebuildVisibleRadios())
+        updateDropdown();
+
     if (entity && radio) {
         setRange(radio->Range);
         update();
     } else {
         targets.clear();
         hoveredTargetIndex = -1;
+        update();                                 // repaint the empty scope
     }
 }
 
+
 // %%% Paint Event %%%
 /* Main paint event for drawing the radio display */
+// void RADIODisplay::paintEvent(QPaintEvent * /*event*/)
+// {
+//     if (width() <= 0 || height() <= 0) return;
+
+
+//     if (entity && radio) {
+//         bool stillValid = false;
+//         for (auto const& pair : entity->radios.radios) {
+//             if (pair.second == radio) { stillValid = true; break; }
+//         }
+//         if (!stillValid) {
+//             radio = nullptr;
+//             hoveredTargetIndex = -1;
+//         }
+//     }
+
+//     QPainter p(this);
+//     drawBackground(p);
+
+//     int w = width();
+//     int h = height();
+//     int outerDiameter = qMin(w - padding*2, h - padding*2);
+//     int outerRadius = outerDiameter / 2;
+//     QPoint center(w / 2, h / 2);
+
+//     drawRadarRing(p, center, outerRadius);
+//     drawConcentricCircles(p, center, outerRadius);
+//     drawTicksAndLabels(p, center, outerRadius);
+//     drawCenterMark(p, center);
+//     drawTopMarker(p, center, outerRadius);
+
+//     if (!radio) return;   // ab yeh check trustworthy hai
+//     if (!radio->targets.isEmpty()) {
+//         int i=0;
+//         for (const Radio::RadioTarget &t : radio->targets) {
+//             // const Target &t = targets[i];
+
+//             // Calculate target position
+//             double per = t.radius / range;
+//             if (per < 0.0) per = 0.0;
+//             if (per > 1.0) per = 1.0;
+
+//             double r = per * outerRadius;
+//             double angleDeg = t.angle-90;
+//             qDebug() <<  (t.angle+180)*-1;
+//             double theta = qDegreesToRadians(angleDeg+entity->transform.getHeading()*2);
+//             int tx = center.x() + int(r * cos(theta));
+//             int ty = center.y() + int(r * sin(-theta));
+
+//             // Draw line from center to target
+//             p.setPen(QPen(radarGreen, 1, Qt::DotLine));
+//             p.drawLine(center, QPoint(tx, ty));
+
+//             // Set color based on hover state
+//             if (i == hoveredTargetIndex) {
+//                 p.setBrush(Qt::cyan);
+//             } else {
+//                 p.setBrush(Qt::red);
+//             }
+
+//             // Draw target dot
+//             p.setPen(Qt::NoPen);
+//             p.drawEllipse(QPointF(tx, ty), 4, 4);
+
+//             // Draw labels ONLY if this target is hovered
+//             if (i == hoveredTargetIndex) {
+//                 p.setPen(QPen(Qt::yellow, 1));
+//                 QFont font = p.font();
+//                 font.setPointSize(8);
+//                 p.setFont(font);
+
+//                 Platform* targetPlatform = dynamic_cast<Platform*>(t.entity);
+//                 QString targetName = targetPlatform ? QString::fromStdString(targetPlatform->Name) : "Unknown";
+
+//                 // Show detailed info for hovered target
+//                 QString angleText = QString("A:%1°").arg(angleDeg, 0, 'f', 1);
+//                 QString distText = QString("D:%1m").arg(t.radius, 0, 'f', 1);
+//                 QString freqText = QString("F:%1MHz").arg(t.frequency, 0, 'f', 1);
+//                 QString nameText = QString("N:%1").arg(targetName);
+
+//                 // Draw text at target position (offset slightly)
+//                 p.drawText(tx + 6, ty - 24, angleText);
+//                 p.drawText(tx + 6, ty - 12, distText);
+//                 p.drawText(tx + 6, ty + 0, freqText);
+//                 p.drawText(tx + 6, ty + 12, nameText);
+//             }
+//             i++;
+//         }
+//     } else if (entity && radio) {
+//         // Display message when no targets detected
+//         p.setPen(Qt::white);
+//         QFont font = p.font();
+//         font.setPointSize(10);
+//         p.setFont(font);
+//         QRect textRect = p.fontMetrics().boundingRect("No Radio Targets Detected");
+//         p.drawText(center.x() - textRect.width()/2, center.y(), "No Radio Targets Detected");
+//     }
+// }
+
+
+
 void RADIODisplay::paintEvent(QPaintEvent * /*event*/)
 {
     if (width() <= 0 || height() <= 0) return;
@@ -270,64 +442,72 @@ void RADIODisplay::paintEvent(QPaintEvent * /*event*/)
     drawTopMarker(p, center, outerRadius);
 
     if (!radio) return;   // ab yeh check trustworthy hai
-    if (!radio->targets.isEmpty()) {
-        int i=0;
-        for (const Radio::RadioTarget &t : radio->targets) {
-            // const Target &t = targets[i];
 
-            // Calculate target position
-            double per = t.radius / range;
-            if (per < 0.0) per = 0.0;
-            if (per > 1.0) per = 1.0;
+    // Jam-suppressed radio ko display par nahi dikhana (updateRadar() list rebuild
+    // karta hai, par yeh guard ek frame ke gap ko bhi cover karta hai).
+    if (radio->isDisplaySuppressed()) return;
 
-            double r = per * outerRadius;
-            double angleDeg = t.angle-90;
-            qDebug() <<  (t.angle+180)*-1;
-            double theta = qDegreesToRadians(angleDeg+entity->transform.getHeading()*2);
-            int tx = center.x() + int(r * cos(theta));
-            int ty = center.y() + int(r * sin(-theta));
+    int drawn = 0;
+    for (int i = 0; i < radio->targets.size(); ++i) {
+        const Radio::RadioTarget &t = radio->targets[i];
 
-            // Draw line from center to target
-            p.setPen(QPen(radarGreen, 1, Qt::DotLine));
-            p.drawLine(center, QPoint(tx, ty));
+        // Jammed platform (uske saare radios suppressed) ko target ki tarah bhi nahi dikhana
+        if (allRadiosDisplaySuppressed(t.entity)) continue;
 
-            // Set color based on hover state
-            if (i == hoveredTargetIndex) {
-                p.setBrush(Qt::cyan);
-            } else {
-                p.setBrush(Qt::red);
-            }
+        // Calculate target position
+        double per = t.radius / range;
+        if (per < 0.0) per = 0.0;
+        if (per > 1.0) per = 1.0;
 
-            // Draw target dot
-            p.setPen(Qt::NoPen);
-            p.drawEllipse(QPointF(tx, ty), 4, 4);
+        double r = per * outerRadius;
+        double angleDeg = t.angle-90;
+        qDebug() <<  (t.angle+180)*-1;
+        double theta = qDegreesToRadians(angleDeg+entity->transform.getHeading()*2);
+        int tx = center.x() + int(r * cos(theta));
+        int ty = center.y() + int(r * sin(-theta));
 
-            // Draw labels ONLY if this target is hovered
-            if (i == hoveredTargetIndex) {
-                p.setPen(QPen(Qt::yellow, 1));
-                QFont font = p.font();
-                font.setPointSize(8);
-                p.setFont(font);
+        // Draw line from center to target
+        p.setPen(QPen(radarGreen, 1, Qt::DotLine));
+        p.drawLine(center, QPoint(tx, ty));
 
-                Platform* targetPlatform = dynamic_cast<Platform*>(t.entity);
-                QString targetName = targetPlatform ? QString::fromStdString(targetPlatform->Name) : "Unknown";
-
-                // Show detailed info for hovered target
-                QString angleText = QString("A:%1°").arg(angleDeg, 0, 'f', 1);
-                QString distText = QString("D:%1m").arg(t.radius, 0, 'f', 1);
-                QString freqText = QString("F:%1MHz").arg(t.frequency, 0, 'f', 1);
-                QString nameText = QString("N:%1").arg(targetName);
-
-                // Draw text at target position (offset slightly)
-                p.drawText(tx + 6, ty - 24, angleText);
-                p.drawText(tx + 6, ty - 12, distText);
-                p.drawText(tx + 6, ty + 0, freqText);
-                p.drawText(tx + 6, ty + 12, nameText);
-            }
-            i++;
+        // Set color based on hover state
+        if (i == hoveredTargetIndex) {
+            p.setBrush(Qt::cyan);
+        } else {
+            p.setBrush(Qt::red);
         }
-    } else if (entity && radio) {
-        // Display message when no targets detected
+
+        // Draw target dot
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(QPointF(tx, ty), 4, 4);
+
+        // Draw labels ONLY if this target is hovered
+        if (i == hoveredTargetIndex) {
+            p.setPen(QPen(Qt::yellow, 1));
+            QFont font = p.font();
+            font.setPointSize(8);
+            p.setFont(font);
+
+            Platform* targetPlatform = dynamic_cast<Platform*>(t.entity);
+            QString targetName = targetPlatform ? QString::fromStdString(targetPlatform->Name) : "Unknown";
+
+            // Show detailed info for hovered target
+            QString angleText = QString("A:%1°").arg(angleDeg, 0, 'f', 1);
+            QString distText = QString("D:%1m").arg(t.radius, 0, 'f', 1);
+            QString freqText = QString("F:%1MHz").arg(t.frequency, 0, 'f', 1);
+            QString nameText = QString("N:%1").arg(targetName);
+
+            // Draw text at target position (offset slightly)
+            p.drawText(tx + 6, ty - 24, angleText);
+            p.drawText(tx + 6, ty - 12, distText);
+            p.drawText(tx + 6, ty + 0, freqText);
+            p.drawText(tx + 6, ty + 12, nameText);
+        }
+        ++drawn;
+    }
+
+    if (drawn == 0 && entity && radio) {
+        // Koi visible target nahi (ya sab jammed hain)
         p.setPen(Qt::white);
         QFont font = p.font();
         font.setPointSize(10);
@@ -336,6 +516,9 @@ void RADIODisplay::paintEvent(QPaintEvent * /*event*/)
         p.drawText(center.x() - textRect.width()/2, center.y(), "No Radio Targets Detected");
     }
 }
+
+
+
 
 // %%% Drawing Methods %%%
 /* Draw radio targets with frequency filtering */

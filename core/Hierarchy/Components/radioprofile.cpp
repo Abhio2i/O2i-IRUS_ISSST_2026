@@ -30,35 +30,67 @@ void RadioProfile::init(Entity *Entity){
 }
 void RadioProfile::Awake(){}
 void RadioProfile::Start(){}
-void RadioProfile::addSubComponent(std::string name, QString data1, QString data2, QJsonObject data3){
-    // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
-    if(!parentEntity->root)return;
-    if(data1 == "Radio"||data1.isLower()){
+void RadioProfile::addSubComponent(std::string name, QString data1, QString data2, QJsonObject data3)
+{
+    if (!parentEntity || !parentEntity->root)
+        return;
+
+    if (data1 == "Radio" || data1.isLower()) {
+
+        // ── Replay / restore: reuse existing radio by recorded ID ──────────
+        if (!data2.isEmpty()) {
+            auto existingIt = radios.find(data2.toStdString());
+            if (existingIt != radios.end() && existingIt->second != nullptr) {
+                Radio* existing = existingIt->second;
+                existing->fromJson(data3);
+                existing->ID           = data2.toStdString();
+                existing->Name         = name;
+                existing->parentEntity = parentEntity;
+                existing->parentID     = parentID;
+                parentEntity->root->Radios[data2.toStdString()] = existing;
+
+                // qDebug() << "[RADIO PROFILE REUSE]"
+                //          << "ID =" << data2
+                //          << "Name =" << QString::fromStdString(name);
+                return;
+            }
+        }
+
         Radio* radio = new Radio(parentEntity->root);
-        if(!data2.isEmpty()){
+
+        if (!data2.isEmpty()) {
+            // IMPORTANT: use the recorded ID so replay can match it later
             std::string id = radio->ID;
             radio->fromJson(data3);
             radio->ID = id;
+            // radio->ID       = data2.toStdString();   // ← was wrong before
             radio->parentID = parentID;
         }
-        // radio->parentEntity = parentEntity;
-        // radio->Name = name;
-        // radios.insert({radio->ID,radio});
+
         radio->parentEntity = parentEntity;
-        radio->Name = name;
+        radio->Name         = name;
+
         if (radio->radioIndex <= 0) {
             radio->radioIndex = m_nextRadioIndex++;
         } else {
             m_nextRadioIndex = std::max(m_nextRadioIndex, radio->radioIndex + 1);
         }
-        radios.insert({radio->ID,radio});
-        qDebug() << "[INDEX-CHECK] radio" << QString::fromStdString(radio->ID)
-                 << "assigned radioIndex=" << radio->radioIndex;
-        parentEntity->root->Radios.insert({radio->ID,radio});
-        emit parentEntity->root->subComponentAdded(QString::fromStdString(ID),QString::fromStdString(radio->ID),QString::fromStdString(name));
-        emit parentEntity->root->radioAdded(QString::fromStdString(parentID), QString::fromStdString(radio->ID));
 
-    }else{
+        radios.insert({radio->ID, radio});
+        parentEntity->root->Radios.insert({radio->ID, radio});
+
+        // qDebug() << "[INDEX-CHECK] radio" << QString::fromStdString(radio->ID)
+        //          << "assigned radioIndex=" << radio->radioIndex;
+
+        emit parentEntity->root->subComponentAdded(
+            QString::fromStdString(ID),
+            QString::fromStdString(radio->ID),
+            QString::fromStdString(name));
+        emit parentEntity->root->radioAdded(
+            QString::fromStdString(parentID),
+            QString::fromStdString(radio->ID));
+
+}else{
         CustomRadioInterface* cradio = nullptr;
         if(parentEntity&&parentEntity->root){
             std::string iD = Uuid::generateShortUniqueID();
@@ -89,16 +121,32 @@ void RadioProfile::addSubComponent(std::string name, QString data1, QString data
     }
 }
 
-void RadioProfile::removeSubComponent(std::string ID){
-    // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
+void RadioProfile::removeSubComponent(std::string ID)
+{
+    if (!parentEntity || !parentEntity->root)
+        return;
+
     auto it = radios.find(ID);
-    if (it != radios.end() && it->second != nullptr) {
-        Radio *radio = it->second;
-        emit parentEntity->root->subComponentRemoved(QString::fromStdString(this->ID),QString::fromStdString(ID),QString::fromStdString(radio->Name));
-        radios.erase(radio->ID);
-        parentEntity->root->Radios.erase(radio->ID);
-        delete radio;
-    }
+    if (it == radios.end() || it->second == nullptr)
+        return;
+
+    Radio *radio = it->second;
+    const QString radioId   = QString::fromStdString(ID);
+    const QString radioName = QString::fromStdString(radio->Name);
+    const QString parentId  = QString::fromStdString(parentID);
+
+    emit parentEntity->root->radioRemoved(parentId, radioId);
+
+
+    emit parentEntity->root->subComponentRemoved(
+        QString::fromStdString(this->ID),
+        radioId,
+        radioName);
+
+
+    radios.erase(radio->ID);
+    parentEntity->root->Radios.erase(radio->ID);
+    delete radio;
 }
 
 void RadioProfile::updateSubComponent(std::string ID, const QJsonObject& obj){

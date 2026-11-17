@@ -1,60 +1,50 @@
-/* ========================================================================= */
-/* File: WeaponTypes/missile.h                                               */
-/* Purpose: Guided missile — follows esm.h / csm.h pattern exactly.         */
-/* ========================================================================= */
-
 #ifndef MISSILE_H
 #define MISSILE_H
 
 #include "core/Hierarchy/EntityProfiles/weapon.h"
 
-class Missile : public Weapon
+class Missile: public Weapon
 {
     Q_OBJECT
 public:
     explicit Missile(Hierarchy* h);
     ~Missile();
 
-    WeaponType weaponType = WeaponType::Missile;
-    QString weaponTypeName() const override { return "Missile"; }
+    float InitialSpeed = 200.0f;         // m/s
+    float CurrentSpeed = 200.0f;         // m/s
+    float MaxSpeed = 500.0f;             // m/s
+    float Acceleration = 20.0f;          // m/s²
+    float MaxAcceleration = 50.0f;       // m/s²
+    float MaxTurnRate = 10.0f;           // degrees/s
+    float MaxPitchRate = 10.0f;          // degrees/s
+    float MaxFlightTime = 300.0f;       // seconds
 
-    // ── Propulsion ────────────────────────────────────────────────────────────
-    PropulsionType propulsionType = PropulsionType::SolidRocket;
-    float thrustMain      = 200000.0f;
-    float thrustBooster   = 50000.0f;
-    float burnTime        = 45.0f;
-    float specificImpulse = 280.0f;
+    bool GuidanceEnabled = true;
+    bool PropulsionEnabled = true;
 
-    // ── Guidance / Seeker ─────────────────────────────────────────────────────
-    GuidanceType guidanceType  = GuidanceType::FullyActive;
-    float seekerRange          = 100000.0f;
-    float seekerFOV            = 45.0f;
-    float lockOnRange          = 50000.0f;
-    float seekerTrackingRate   = 30.0f;
-    float seekerLockAccuracy   = 0.5f;
-    bool  isLocked             = false;
-    bool  isActive             = false;
+    void Update()override{};
+    void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
+    std::vector<std::string> getSupportedComponents() override;
 
+    void addSupportedcomponent() override;
 
-    // ── Overrides (same pattern as ESM::scan()) ───────────────────────────────
-    void        launch()                              override;  // flight behaviour
-    void        updateGuidance()                      override;
-    bool        canEngage(Platform *target)           override;
+    void addComponent(std::string name) override;
+
+    void removeComponent(std::string name) override;
+
+    QJsonObject getComponent(std::string name) override;
+
+    void updateComponent(QString name, const QJsonObject& obj) override;
+
     QJsonObject toJson()                        const override;
     void        fromJson(const QJsonObject&)          override;
-    void Update() override;
-    // ── Flight system (5 functions, all override base empty stubs) ───────────
-    void      missileStart()                 override;
-    void      checkFlightState()             override;
-    void      missileUpdate(float deltaTime) override;
-    QVector3D calcTargetVector()       const override;
-    void      missileEnd()                   override;
-
-    // ── Enum helpers ──────────────────────────────────────────────────────────
-    QString guidanceTypeToString()              const;
-    QString propulsionTypeToString()            const;
-    void    setGuidanceTypeFromString  (const QString&);
-    void    setPropulsionTypeFromString(const QString&);
+    QJsonObject AdditionalParameters;   //!< User-defined extension parameters
+    void SaveState();
+    void RestoreState();
+private:
+    bool statesaved = false;
+    QJsonObject InitalState;
 };
 
 #endif // MISSILE_H

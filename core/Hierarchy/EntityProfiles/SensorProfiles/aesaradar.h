@@ -301,7 +301,22 @@ public:
 
     // Returns current radar operating mode from latest model output. REQ-AESA-003.
     aesa::RadarMode getMode()    const { return radarCore_.getOutput().mode;             }
-
+    aesa::RadarOutput getRadarOutput() const { return radarCore_.getOutput(); }
+    // FUNCTION:    platformToRadarID
+    //
+    // DESCRIPTION: Converts a platform scene-graph key string to a stable
+    //              32-bit radar target ID using the FNV-1a hash algorithm.
+    //              Deterministic across all platforms and simulation runs —
+    //              the same key always produces the same ID. Never returns 0
+    //              (reserved for "no target") — maps zero-hash to 1.
+    //
+    // PARAMETERS:
+    //   key  [in]  Platform scene-graph identifier string. Must be non-empty
+    //              and stable across frames for a given platform.
+    //
+    // RETURNS:    Non-zero uint32_t radar target ID.
+    // SIDE EFFECTS: None. Pure computation.
+    static uint32_t platformToRadarID(const std::string& key);
     ECS::sensorComponent& getSensorData() const;
 
     // Returns current T/R module duty cycle [0.0, 1.0] from latest model output.
@@ -677,22 +692,9 @@ private:
     // =========================================================================
 
     // =========================================================================
-    // FUNCTION:    platformToRadarID
-    //
-    // DESCRIPTION: Converts a platform scene-graph key string to a stable
-    //              32-bit radar target ID using the FNV-1a hash algorithm.
-    //              Deterministic across all platforms and simulation runs —
-    //              the same key always produces the same ID. Never returns 0
-    //              (reserved for "no target") — maps zero-hash to 1.
-    //
-    // PARAMETERS:
-    //   key  [in]  Platform scene-graph identifier string. Must be non-empty
-    //              and stable across frames for a given platform.
-    //
-    // RETURNS:    Non-zero uint32_t radar target ID.
-    // SIDE EFFECTS: None. Pure computation.
+
     // =========================================================================
-    static uint32_t platformToRadarID(const std::string& key);
+    // static uint32_t platformToRadarID(const std::string& key);
 
     // =========================================================================
     // FUNCTION:    platformRCS

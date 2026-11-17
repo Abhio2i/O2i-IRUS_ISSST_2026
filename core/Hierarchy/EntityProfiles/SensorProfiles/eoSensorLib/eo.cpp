@@ -13,6 +13,7 @@ EO::~EO()
 {
     //std::cout<<"\tElectro Optic Module is Deinilisalized"<<std::endl;
 }
+
 float EO::getSetThreshold(float distance,float area)
 {
     if (distance <= 0.0 || area <= 0.0){

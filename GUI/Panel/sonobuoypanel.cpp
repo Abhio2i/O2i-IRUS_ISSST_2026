@@ -81,7 +81,7 @@ void SonoBuoyPanel::onZoomOut()
 void SonoBuoyPanel::onZoomIn()
 {
     zoomLevel /= 2.f; // 10% zoom out
-    if (zoomLevel < 25) zoomLevel = 25; // Min zoom limit
+    if (zoomLevel < 5) zoomLevel = 5; // Min zoom limit
     this->update();
 }
 
@@ -339,17 +339,55 @@ void SonoBuoyPanel::paintEvent(QPaintEvent * /*event*/)
         if (it != entity->weapons.weapons->end() && it->second ) {
             QVector3D Sposition = sensor->transform.translation();
             QPointF senpos(Sposition.x(),-Sposition.z());
-            QPointF relPos((senpos.x()-pos.x()),(senpos.y()-pos.y()));
-            relPos.setX(((relPos.x()/zoomLevel)*center.x())+center.x());
-            relPos.setY(((relPos.y()/zoomLevel)*center.x())+center.y());
-            float size = 4;
-            if(sensor->collider.CollideRadius>5000){
-                size = 8.f;
-                p.setBrush(Qt::red);
-            }else{
-                p.setBrush(Qt::green);
+            // QPointF relPos((senpos.x()-pos.x()),(senpos.y()-pos.y()));
+            // relPos.setX(((relPos.x()/zoomLevel)*center.x())+center.x());
+            // relPos.setY(((relPos.y()/zoomLevel)*center.x())+center.y());
+            // float size = 4;
+            // if(sensor->collider.CollideRadius>5000){
+            //     size = 8.f;
+            //     p.setBrush(Qt::red);
+            // }else{
+            //     p.setBrush(Qt::green);
+            // }
+            // p.drawEllipse(relPos, size, size);
+            QPointF relPos((senpos.x() - pos.x()), (senpos.y() - pos.y()));
+
+            relPos.setX(((relPos.x() / zoomLevel) * center.x()) + center.x());
+            relPos.setY(((relPos.y() / zoomLevel) * center.x()) + center.y());
+
+            float size = 20.0f;
+            QColor color = Qt::green;
+
+            if (sensor->collider.CollideRadius > 5000) {
+                size = 26.0f;
+                color = Qt::red;
             }
-            p.drawEllipse(relPos, size, size);
+
+            p.save();
+            p.setRenderHint(QPainter::Antialiasing, true);
+
+            p.translate(relPos);
+            p.scale(size / 24.0f, size / 24.0f);
+
+            QPen pen(color, 2.0);
+            pen.setCapStyle(Qt::RoundCap);
+
+            p.setPen(pen);
+            p.setBrush(Qt::NoBrush);
+
+            // Radar signal waves
+            p.drawArc(QRectF(-10, -10, 20, 20), 40 * 16, 100 * 16);
+            p.drawArc(QRectF(-7, -7, 14, 14), 40 * 16, 100 * 16);
+            p.drawArc(QRectF(-4, -4, 8, 8), 40 * 16, 100 * 16);
+
+            // Antenna
+            p.drawLine(QPointF(0, 0), QPointF(0, 9));
+
+            // Antenna base
+            p.setBrush(color);
+            p.drawEllipse(QPointF(0, 1), 2, 2);
+
+            p.restore();
             if (!sensor->detection.isEmpty()) {
                 int i=0;
                 for (const Sonobuoy::SonobuoyOutput &t : sensor->detection) {

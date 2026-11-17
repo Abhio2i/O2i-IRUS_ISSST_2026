@@ -151,14 +151,23 @@ void IRDisplay::selectEntity(Entity* entit)
         // Only use sensor while it is known to be valid
         sensor = s;
 
+        std::unordered_map<std::string, Entity::Category> cats;
+        std::unordered_map<std::string, float> temps;
+        float bgTemp = 20.0f;
+        if (IRSensor* irSensor = dynamic_cast<IRSensor*>(s)) {
+            cats = irSensor->IRDetectionCategory;
+            temps  = irSensor->IRTargetTempC;
+            bgTemp = irSensor->background_temperature;
+        }
+
         glDisplay->setSensorParameter(
             s->sensorPoseGeo,
             s->azimuth,
-            s->IRDetectionCoord
-            );
-
-        qDebug() << "IRDetectionCoord Size:"
-                 << s->IRDetectionCoord.size();
+            s->IRDetectionCoord,
+            s->range * 1000.0f,
+            cats,
+            temps,
+            bgTemp);
 
         setWindowTitle(
             "IR Display (" +
@@ -217,12 +226,14 @@ void IRDisplay::updateRadar()
     Platform* platform = dynamic_cast<Platform*>(currentEntity);
     if (!platform) {
         entity = nullptr; sensor = nullptr;
-        id.clear(); sensorId.clear();
+        id.clear();
+        sensorId.clear();
         return;
     }
 
     Sensor* currentSensor =
         platform->sensors.getSensor(sensorId.toStdString());
+
     if (!currentSensor) {
         sensor = nullptr; sensorId.clear();
         setWindowTitle("IR Display (Sensor Removed)");
@@ -233,10 +244,17 @@ void IRDisplay::updateRadar()
     sensor = currentSensor;
     setRange(currentSensor->range);
 
+     std::unordered_map<std::string, Entity::Category> cats;
+    std::unordered_map<std::string, float> temps;
+    float bgTemp = 20.0f;
+
     //  1) GIMBAL PEHLE — scan isse pehle yeh values use kare
-    if (IRSensor* ir = dynamic_cast<IRSensor*>(currentSensor)) {
-        ir->gimbalAzimuthOffset   = glDisplay->getCurrentAzimuth();
-        ir->gimbalElevationOffset = glDisplay->getCurrentElevation();
+    if (IRSensor* irSensor = dynamic_cast<IRSensor*>(currentSensor)) {
+        irSensor->gimbalAzimuthOffset   = glDisplay->getCurrentAzimuth();
+        irSensor->gimbalElevationOffset = glDisplay->getCurrentElevation();
+        cats = irSensor->IRDetectionCategory;
+        temps = irSensor->IRTargetTempC;
+        bgTemp = irSensor->background_temperature;
     }
 
     // 2) Fresh coords display ko
@@ -244,7 +262,10 @@ void IRDisplay::updateRadar()
         currentSensor->sensorPoseGeo,
         currentSensor->azimuth,
         currentSensor->IRDetectionCoord,
-        currentSensor->range * 1000.0f // range stored in km — see irsensor.cpp
+        currentSensor->range * 1000.0f, // range stored in km — see irsensor.cpp
+        cats,
+        temps,
+        bgTemp
         );
 
     // 3) Paint — track follow

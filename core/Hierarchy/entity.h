@@ -180,6 +180,7 @@ public:
     double glintFactor  = 1.0;  // reflection boost
     float Health = 100;
     float fuel = 100;
+    float Temperature = 37;
     bool isVictom = false;
     bool engaged = false;
     float detectionCount = 0;
@@ -214,14 +215,13 @@ public:
     void removeWeapon(Weapon* weapon);
     void clearWeapons();
 
-public: signals:
-    void destroy(std::string ID);
+
     // =========================================================================
     // SECTION: Virtual Interface (DO-178C Compliance)
     // DESCRIPTION: Mandatory methods for derived simulation objects.
     // =========================================================================
     virtual void spawn() = 0;
-    virtual void SyncByJson(const QJsonObject& obj);
+    virtual void SyncByJson(const QJsonObject& obj) = 0;
     virtual std::vector<std::string> getSupportedComponents() = 0;
     virtual void addSupportedcomponent() = 0;
     virtual void addComponent(std::string name) = 0;
@@ -230,7 +230,8 @@ public: signals:
     virtual void updateComponent(QString name, const QJsonObject& obj) = 0;
     virtual QJsonObject toJson() const = 0;
     virtual void fromJson(const QJsonObject& obj) = 0;
-
+public: signals:
+    void  destroy(std::string ID);
 };
 
 #endif // ENTITY_H

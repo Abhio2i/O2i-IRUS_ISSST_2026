@@ -12,7 +12,7 @@ Collider::Collider():Component() {
     WarningRadius = 100;
     collider = Constants::ColliderType::Box;
     // vector = nullptr; // Initialize pointer
-    type = Constants::EntityType::Platform; // Use Platform as default
+    type = Constants::EntityType::Platform;
 
 }
 

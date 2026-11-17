@@ -52,6 +52,7 @@
 #ifndef RUNTIMEEDITOR_H
 #define RUNTIMEEDITOR_H
 
+#include "Editors/RuntimeStatisticsDialog.h"
 #include "GUI/Console/consoleview.h"               // For console view
 #include "GUI/Hierarchytree/hierarchyconnector.h"  // For hierarchy connections
 #include "GUI/Hierarchytree/hierarchytree.h"      // For hierarchy tree view
@@ -103,7 +104,8 @@ class MapWidget;
 class ApiLayerPanel;
 class AutoScriptManager; //////////
 class TcpAutoScriptSource; ////////////
-class AutoScriptController; ////////////////
+class AutoScriptController;
+class TimeToolBar;
 class RuntimeEditor : public QMainWindow
 {
     Q_OBJECT
@@ -139,6 +141,7 @@ public:
     static QString     s_missionFilePath;
     Console *console;
     RuntimeToolBar *runtimeToolBar;
+    TimeToolBar *m_timeToolBar = nullptr;
     DesignToolBar *designToolBar;
     void markUnsavedChanges();
     ConsoleView *consoleView;
@@ -189,6 +192,8 @@ signals:
 
 private:
     // %%% UI Setup Methods %%%
+    RuntimeStatisticsDialog dialog;
+    RuntimeStatisticsData stats;
     GraphWidget *graphWidget = nullptr;
     ScriptEngine* scriptengine = nullptr;
     CustomResizableOverlayDock *hierarchyDock;
@@ -253,17 +258,16 @@ private:
     Entity* m_selectedSonarEntity = nullptr;
     QString m_lastSelectedEntityId;
     QToolBar *rightToolBar = nullptr;
-     bool m_loggerDialogPausedSim = false;
+    bool m_loggerDialogPausedSim = false;
     QString m_loadedRuntimeFile;
     void updateTitleBar();
     ApiLayerPanel* m_apiLayerPanel = nullptr;
     CustomResizableOverlayDock* m_apiMapDock = nullptr;
     ApiMapToolbar* m_apiMapToolbar = nullptr;
     EntityInfoDialog* m_entityInfoDialog = nullptr;
-     void syncEntityActiveStatesFromHierarchy();
-    QPointer<QDialog> m_sensorsDialog;   // currently open Sensors dialog (agar hai)
-    void updateSensorsDialogTitle(const QString &title);   // helper
-
+    void syncEntityActiveStatesFromHierarchy();
+    QPointer<QDialog> m_sensorsDialog;
+    void updateSensorsDialogTitle(const QString &title);
 
 private:
     qint64 pausedTimeMs = 0;

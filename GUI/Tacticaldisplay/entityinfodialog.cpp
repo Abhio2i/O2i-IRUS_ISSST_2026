@@ -146,6 +146,8 @@ void EntityInfoDialog::createSpeedAltTableSection()
 
     // Setup items (unchanged)
     speedAltTable->setItem(0, 0, new QTableWidgetItem("Speed"));
+    speedAltTable->item(0, 0)->setFlags(
+        speedAltTable->item(0, 0)->flags() & ~Qt::ItemIsEditable);
     speedAltTable->item(0, 0)->setForeground(Qt::white);
 
     speedAltTable->setItem(0, 1, new QTableWidgetItem("-"));
@@ -157,6 +159,8 @@ void EntityInfoDialog::createSpeedAltTableSection()
     speedAltTable->item(0, 2)->setForeground(Qt::white);
 
     speedAltTable->setItem(1, 0, new QTableWidgetItem("Altitude"));
+    speedAltTable->item(1, 0)->setFlags(
+        speedAltTable->item(1, 0)->flags() & ~Qt::ItemIsEditable);
     speedAltTable->item(1, 0)->setForeground(Qt::white);
 
     speedAltTable->setItem(1, 1, new QTableWidgetItem("-"));
@@ -166,8 +170,10 @@ void EntityInfoDialog::createSpeedAltTableSection()
     speedAltTable->setItem(1, 2, new QTableWidgetItem("-"));
     speedAltTable->item(1, 2)->setFlags(speedAltTable->item(1, 2)->flags() | Qt::ItemIsEditable);
     speedAltTable->item(1, 2)->setForeground(Qt::white);
-    // Heading row add karo (existing code ke baad):
+
     speedAltTable->setItem(2, 0, new QTableWidgetItem("Heading"));
+    speedAltTable->item(2, 0)->setFlags(
+        speedAltTable->item(2, 0)->flags() & ~Qt::ItemIsEditable);
     speedAltTable->item(2, 0)->setForeground(Qt::white);
 
     speedAltTable->setItem(2, 1, new QTableWidgetItem("-"));
@@ -198,6 +204,7 @@ void EntityInfoDialog::createSpeedAltTableSection()
             });
         }
     });
+
     connect(speedAltTable, &QTableWidget::cellChanged, this, &EntityInfoDialog::onSpeedAltCellChanged);
     scrollLayout->addWidget(speedAltTable);
 }
@@ -256,7 +263,7 @@ void EntityInfoDialog::createOptionsSection()
 
     showConnectionCheckBox = new QCheckBox("Show Connection");
     showConnectionCheckBox->setStyleSheet(EntityInfoDialogStyles::CheckBox);
-        showConnectionCheckBox->setVisible(false);
+    showConnectionCheckBox->setVisible(false);
 
     secondLineLayout->addWidget(showConnectionCheckBox);
     secondLineLayout->addStretch();
@@ -344,6 +351,7 @@ void EntityInfoDialog::setEntityInfoFromHierarchy(const QString& entityId,
                                                   Entity* entity,
                                                   Platform* platform)
 {
+    closeSubDialogs();
     entryInfo               = nullptr;
     m_trackedEntity         = nullptr;
     m_entityFromHierarchy   = nullptr;
@@ -358,6 +366,7 @@ void EntityInfoDialog::setEntityInfoFromHierarchy(const QString& entityId,
     }
 
     if (!GlobalRegistry::entityToHierarchyMap.count(entity)) {
+        closeSubDialogs();
         clearInfo();
         hide();
         return;
@@ -405,6 +414,7 @@ void EntityInfoDialog::updateEntityInfo()
     }
 
     if (!entity->Active) {
+        closeSubDialogs();
         if (isVisible()) hide();
         return;
     }
@@ -527,7 +537,10 @@ void EntityInfoDialog::updateEntityInfo()
 
         if (dynModel) {
             currentSpeed    = dynModel->currentSpeed;
-            currentAltitude = dynModel->currentAltitude * KMtoFT;
+            currentAltitude = dynModel->currentAltitude* KMtoFT;
+            if(dynModel->transform){
+                currentAltitude = dynModel->transform->getAltitude();// * KMtoFT;
+            }
             reqSpeed        = dynModel->moveSpeed;
             reqAlt          = dynModel->Altitude;
 
@@ -536,6 +549,9 @@ void EntityInfoDialog::updateEntityInfo()
                 if (mothership) {
                     currentSpeed    = mothership->dynamicModel.currentSpeed;
                     currentAltitude = mothership->dynamicModel.currentAltitude * KMtoFT;
+                    if(dynModel->transform){
+                        currentAltitude = dynModel->transform->getAltitude();// * KMtoFT;
+                    }
                     reqSpeed        = mothership->dynamicModel.moveSpeed;
                     reqAlt          = mothership->dynamicModel.Altitude;
                 }
@@ -706,35 +722,6 @@ void EntityInfoDialog::onWeaponsClicked()
             auto* typeItem = new QTableWidgetItem(weapon->weaponTypeName());
             typeItem->setForeground(QColor("#00BFFF"));
             weaponsTable->setItem(row, 1, typeItem);
-
-            auto* rangeItem = new QTableWidgetItem(
-                QString("%1 km").arg(weapon->maxRange / 1000.0f, 0, 'f', 1));
-            rangeItem->setForeground(Qt::white);
-            weaponsTable->setItem(row, 2, rangeItem);
-
-            auto* speedItem = new QTableWidgetItem(
-                QString("%1 km/h").arg(weapon->maxVelocity * 3.6f, 0, 'f', 0));
-            speedItem->setForeground(Qt::white);
-            weaponsTable->setItem(row, 3, speedItem);
-
-            auto* blastItem = new QTableWidgetItem(
-                QString("%1 m").arg(weapon->blastRadius, 0, 'f', 0));
-            blastItem->setForeground(Qt::white);
-            weaponsTable->setItem(row, 4, blastItem);
-
-            QString statusStr = weapon->armed ? "Armed" :
-                                    weapon->safed ? "Safed" : "Inactive";
-            auto* statusItem = new QTableWidgetItem(statusStr);
-            statusItem->setForeground(weapon->armed  ? QColor("#e74c3c") :
-                                          weapon->safed  ? QColor("#27ae60") :
-                                          QColor("#e67e22"));
-            weaponsTable->setItem(row, 5, statusItem);
-
-            QString launchedStr = weapon->isLaunched ? "Yes" : "No";
-            auto* launchedItem = new QTableWidgetItem(launchedStr);
-            launchedItem->setForeground(weapon->isLaunched ? QColor("#e74c3c") :
-                                            QColor("#27ae60"));
-            weaponsTable->setItem(row, 6, launchedItem);
             row++;
         }
 
@@ -772,10 +759,10 @@ void EntityInfoDialog::onWeaponsClicked()
         int total    = static_cast<int>(plt->weapons.weapons->size());
         int launched = 0;
         int armed    = 0;
-        for (const auto& [id, w] : *plt->weapons.weapons) {
-            if (w && w->isLaunched) launched++;
-            if (w && w->armed)      armed++;
-        }
+        // for (const auto& [id, w] : *plt->weapons.weapons) {
+        //     if (w && w->isLaunched) launched++;
+        //     if (w && w->armed)      armed++;
+        // }
         summaryLabel->setText(
             QString("Total: %1  |  Armed: %2  |  Launched: %3  |  Remaining: %4")
                 .arg(total).arg(armed).arg(launched).arg(total - launched));
@@ -1607,6 +1594,7 @@ void EntityInfoDialog::onSpeedAltCellChanged(int row, int column)
 void EntityInfoDialog::onEntityInvalidated(const QString& entityId)
 {
     if (entityId == currentEntityId || entityId.isEmpty()) {
+        closeSubDialogs();
         entryInfo = nullptr;
         currentEntityId.clear();
         clearInfo();
@@ -1615,9 +1603,20 @@ void EntityInfoDialog::onEntityInvalidated(const QString& entityId)
 }
 void EntityInfoDialog::onHierarchyReset()
 {
+    closeSubDialogs();
     entryInfo       = nullptr;
     m_trackedEntity = nullptr;
     currentEntityId.clear();
     clearInfo();
     if (isVisible()) hide();
+}
+void EntityInfoDialog::closeSubDialogs()
+{
+    for (QPointer<QDialog> d : { m_weaponsDialog, m_sensorsDialog,
+                                m_radiosDialog,  m_iffDialog,
+                                m_formationDialog }) {
+        if (!d.isNull()) {
+            d->close();
+        }
+    }
 }

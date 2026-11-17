@@ -15,7 +15,7 @@ bool DISDatumRegistry::getFixed(uint32_t datumID, Platform* platform,
         uint32_t armedCount = 0;
         if (platform->weapons.weapons) {
             for (const auto& [id, weapon] : *platform->weapons.weapons) {
-                if (weapon && weapon->armed) armedCount++;
+                // if (weapon && weapon->armed) armedCount++;
             }
         }
         outValue = armedCount;

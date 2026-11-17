@@ -96,7 +96,7 @@ void DoctrineParameters::setupUI()
         blueEngagementPolicy, blueRetreatPolicy,
         blueDetectionPolicy, blueClearZonesBtn
         );
-    stackedPages->addWidget(bluePage);   // index 0
+    stackedPages->addWidget(bluePage);
 
     // Build Red page (index 1)
     QWidget *redPage = buildTeamPage(
@@ -106,7 +106,7 @@ void DoctrineParameters::setupUI()
         redEngagementPolicy, redRetreatPolicy,
         redDetectionPolicy, redClearZonesBtn
         );
-    stackedPages->addWidget(redPage);    // index 1
+    stackedPages->addWidget(redPage);
 
     mainLayout->addWidget(stackedPages);
     mainLayout->addStretch();
@@ -435,7 +435,6 @@ QJsonObject DoctrineParameters::toJson() const
 void DoctrineParameters::loadFromJson(const QJsonObject &data)
 {
     blockSignals(true);
-
     if (data.contains("blue") || data.contains("red")) {
         // New multi-team format
         loadTeamFromJson(FORCE_BLUE, data["blue"].toObject());
@@ -456,7 +455,6 @@ void DoctrineParameters::loadFromJson(const QJsonObject &data)
 void DoctrineParameters::resetState()
 {
     blockSignals(true);
-
     blueDoctrineNameEdit->clear();
     blueMissionObjectiveEdit->clear();
     blueMissionType->setCurrentIndex(0);
@@ -464,7 +462,6 @@ void DoctrineParameters::resetState()
     blueEngagementPolicy->setCurrentIndex(0);
     blueRetreatPolicy->setCurrentIndex(0);
     blueDetectionPolicy->setCurrentIndex(0);
-
     redDoctrineNameEdit->clear();
     redMissionObjectiveEdit->clear();
     redMissionType->setCurrentIndex(0);
@@ -472,7 +469,6 @@ void DoctrineParameters::resetState()
     redEngagementPolicy->setCurrentIndex(0);
     redRetreatPolicy->setCurrentIndex(0);
     redDetectionPolicy->setCurrentIndex(0);
-
     switchToTeam(FORCE_BLUE);
     blockSignals(false);
 }

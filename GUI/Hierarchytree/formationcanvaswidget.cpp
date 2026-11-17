@@ -130,7 +130,6 @@ void FormationCanvasWidget::paintEvent(QPaintEvent *)
     p.setPen(Qt::white);
     p.drawText(center + QPointF(14, 4), "Mothership");
 
-    // Formation points (icons only, no connecting lines)
     if (!m_points.isEmpty()) {
         for (int i = 0; i < m_points.size(); ++i) {
             QPoint sp = worldToScreen(m_points[i]);
@@ -173,7 +172,6 @@ void FormationCanvasWidget::mousePressEvent(QMouseEvent *event)
         if (idx >= 0) {
             m_draggingIndex = idx;
         } else {
-            // Add new point
             QPointF world = screenToWorld(event->pos());
             m_points.append(world);
             emit positionsChanged(getPositions());

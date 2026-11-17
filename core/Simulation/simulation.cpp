@@ -56,13 +56,6 @@ void Simulation::init(){
         }
     });
 
-    broadphase = new btDbvtBroadphase();
-    collisionConfiguration = new btDefaultCollisionConfiguration();
-    dispatcher = new btCollisionDispatcher(collisionConfiguration);
-    solver = new btSequentialImpulseConstraintSolver();
-    dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
-    dynamicsWorld->setGravity(btVector3(Gravity->x, Gravity->y, Gravity->z));
-
     emit Awake();
     emit Begin();
 }
@@ -83,18 +76,6 @@ void Simulation::ReInit(){
 }
 
 Simulation::~Simulation() {
-    for (auto& [id, body] : bulletBodies) {
-        dynamicsWorld->removeRigidBody(body);
-        delete body->getMotionState();
-        delete body->getCollisionShape();
-        delete body;
-    }
-    delete dynamicsWorld;
-    delete solver;
-    delete dispatcher;
-    delete collisionConfiguration;
-    delete broadphase;
-    delete Gravity;
     //added by Aman to avoid crash during stop
     if (updateTimer) updateTimer->stop();
 }
@@ -521,86 +502,6 @@ void Simulation::entityAdded(QString /*parentID*/, Entity* entity) {
             component.sea.reset();
         }
         physicsComponent[platform->ID] = component;
-
-        // if (/*platform->transform &&*/ platform->rigidbody) {
-        btCollisionShape* shape = nullptr;
-
-        if (/*platform->collider &&*/ platform->collider.collider == Constants::ColliderType::Box) {
-            shape = new btBoxShape(btVector3(1, 1, 1));
-            shape->setLocalScaling(btVector3(
-                platform->transform.matrix.scale3D().x() * platform->collider.getDimension().Width * 0.5f,
-                platform->transform.matrix.scale3D().y() * platform->collider.getDimension().Length * 0.5f,
-                platform->transform.matrix.scale3D().z() * platform->collider.getDimension().Height * 0.5f));
-        } else if (/*platform->collider && */platform->collider.collider == Constants::ColliderType::Sphere) {
-            shape = new btSphereShape(platform->collider.CollideRadius * platform->transform.matrix.scale3D().length());
-        }
-
-        if (shape) {
-            btTransform transform;
-            transform.setIdentity();
-            transform.setOrigin(btVector3(
-                platform->transform.matrix.translation().x(),
-                platform->transform.matrix.translation().y(),
-                platform->transform.matrix.translation().z()));
-            btQuaternion quat;
-            quat.setEulerZYX(
-                qDegreesToRadians(platform->transform.toEulerAngles().z()),
-                qDegreesToRadians(platform->transform.toEulerAngles().y()),
-                qDegreesToRadians(platform->transform.toEulerAngles().x()));
-            transform.setRotation(quat);
-
-            float mass = platform->rigidbody.Mass;
-            btVector3 inertia(0, 0, 0);
-            if (mass > 0)
-                shape->calculateLocalInertia(mass, inertia);
-
-            btDefaultMotionState* motionState = new btDefaultMotionState(transform);
-            btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, motionState, shape, inertia);
-            btRigidBody* body = new btRigidBody(rbInfo);
-
-            if (!platform->rigidbody.Gravity) {
-                body->setGravity(btVector3(0, 0, 0));
-            }
-
-            if (platform->rigidbody.Kinematics) {
-                body->setCollisionFlags(body->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-                body->setActivationState(DISABLE_DEACTIVATION);
-            }
-
-            body->setLinearVelocity(btVector3(
-                platform->rigidbody.velocity->x,
-                platform->rigidbody.velocity->y,
-                platform->rigidbody.velocity->z));
-
-            body->setAngularVelocity(btVector3(
-                platform->rigidbody.angularVelocity->x,
-                platform->rigidbody.angularVelocity->y,
-                platform->rigidbody.angularVelocity->z));
-
-            connect(&platform->rigidbody, &Rigidbody::setLinearVel, this, [body](const Vector& velocity) {
-                body->setLinearVelocity(btVector3(velocity.x, velocity.y, velocity.z));
-            });
-
-            connect(&platform->rigidbody, &Rigidbody::setAngularVel, this, [body](const Vector& velocity) {
-                body->setAngularVelocity(btVector3(velocity.x, velocity.y, velocity.z));
-            });
-
-            btVector3 linearFactor(1, 1, 1);
-            if (platform->rigidbody.freezePositionX) linearFactor.setX(0);
-            if (platform->rigidbody.freezePositionY) linearFactor.setY(0);
-            if (platform->rigidbody.freezePositionZ) linearFactor.setZ(0);
-            body->setLinearFactor(linearFactor);
-
-            btVector3 angularFactor(1, 1, 1);
-            if (platform->rigidbody.freezeRotationX) angularFactor.setX(0);
-            if (platform->rigidbody.freezeRotationY) angularFactor.setY(0);
-            if (platform->rigidbody.freezeRotationZ) angularFactor.setZ(0);
-            body->setAngularFactor(angularFactor);
-
-            dynamicsWorld->addRigidBody(body);
-            bulletBodies[platform->ID] = body;
-        }
-        // }
     }
 
     // ── Weapon entity: register in physics + start missile flight monitor ───
@@ -614,21 +515,14 @@ void Simulation::entityAdded(QString /*parentID*/, Entity* entity) {
             component.weapon      = weapon;
             component.zone        = nullptr;
             component.transform   = &weapon->transform;
-            component.rigidbody   = &weapon->rigidbody;
+            component.rigidbody   = nullptr;
             component.collider    = &weapon->collider;
-            component.dynamicModel= &weapon->dynamicModel;
+            component.dynamicModel= nullptr;
             component.aircraft    = nullptr;   // weapons use own flight model
             component.sea         = nullptr;
             physicsComponent[weapon->ID] = component;
 
-            // Set canvas so blast PNG renders on detonation
-            if (m_canvas) weapon->setCanvas(m_canvas);
 
-            // Start the missile flight monitor: it will call missileStart()
-            // automatically as soon as weapon->Active becomes true.
-            // weapon->startFlightMonitor();
-            // Console::log("[Simulation] Weapon registered + flight monitor started: "
-            //              + weapon->Name);
         }
     }
 
@@ -648,38 +542,14 @@ void Simulation::entityAdded(QString /*parentID*/, Entity* entity) {
 
     emit HierarchyUpdate();
 
-    // // ✅ LAST ME - Auto-resume if was playing
-    // if (wasPlaying) {
-    //     QTimer::singleShot(50, this, [this]() {
-    //         startf();
-    //         Console::log("Simulation auto-resumed after entity addition");
-    //     });
-    // }
 }
 
 void Simulation::entityRemoved(QString ID) {
     std::string key = ID.toStdString();
 
-    auto bulletIt = bulletBodies.find(key);
-    if (bulletIt != bulletBodies.end()) {
-        btRigidBody* body = bulletIt->second;
-        if (body) {
-            dynamicsWorld->removeRigidBody(body);
-            delete body->getMotionState();
-            delete body->getCollisionShape();
-            delete body;
-        }
-        bulletBodies.erase(bulletIt);
-    }
 
     auto physIt = physicsComponent.find(key);
     if (physIt != physicsComponent.end()) {
-        // Stop weapon flight monitor before removing
-        // if (physIt->second.base &&
-        //     physIt->second.base->type == Constants::EntityType::Weapon) {
-        //     Weapon* weapon = dynamic_cast<Weapon*>(physIt->second.base);
-        //     // if (weapon) weapon->stopFlightMonitor();
-        // }
         physicsComponent.erase(physIt);
     }
 
@@ -773,7 +643,7 @@ void Simulation::updateDynamics(float dt, PhysicsComponent *comp)
         return;
 
     // Formation/follow uses the existing specialized path.
-    if (dm->follow && dm->followEntity)
+    if (dm->followF)//dm->follow && dm->followEntity)
         return;
 
     if (!trajectory->Active ||!trajectory->FollowPath ||trajectory->Trajectories.size() < 2)
@@ -924,7 +794,6 @@ void Simulation::updateDynamics(float dt, PhysicsComponent *comp)
                               (180.0f / static_cast<float>(M_PI));
         transform->geocord.altitude = static_cast<double>(t.altitude) * M_TO_FT;
         return;
-
     }
 
     // ========================================================================
@@ -1102,6 +971,7 @@ void Simulation::promoteToLocalPhysics(const std::string& entityID) {
         it->second.aircraft = std::make_shared<Aircraft>();
     }
 }
+
 void Simulation::calculatePhysics() {
     const float dt = deltaTime * speed;
     const float maxDt = 1.0f / PhysicsUpdateFrameRate;
@@ -1109,6 +979,14 @@ void Simulation::calculatePhysics() {
     simulationTime += dt;
     //dynamicsWorld->stepSimulation(clampedDt, 10);
     emit Physics();
+    if (!fastupdate) {
+        for (auto& [id, comp] : physicsComponent) {
+            if (comp.base && comp.base->root) {
+                comp.base->root->updateJammingDisplaySuppression();
+                break;
+            }
+        }
+    }
 
     simMin +=simCount;
     if(physicsComponent.size() <= simMin){
@@ -1172,65 +1050,7 @@ void Simulation::calculatePhysics() {
         }
         comp.transform->sync();
         num++;
-        // auto it = bulletBodies.find(id);
-        // if (it != bulletBodies.end()) {
-        //     btRigidBody* body = it->second;
-        //     btTransform trans;
-        //     body->getMotionState()->getWorldTransform(trans);
 
-        //     btVector3 pos = trans.getOrigin();
-        //     btQuaternion rot = trans.getRotation();
-        //     // comp.transform->position->x = pos.getX();
-        //     // comp.transform->position->y = pos.getY();
-        //     // comp.transform->position->z = pos.getZ();
-
-        //     btScalar x, y, z;
-        //     rot.getEulerZYX(z, y, x);
-        //     // comp.transform->rotation->x = qRadiansToDegrees(x);
-        //     // comp.transform->rotation->y = qRadiansToDegrees(y);
-        //     // comp.transform->rotation->z = qRadiansToDegrees(z);
-
-        //     if (comp.collider) {
-        //         body->getCollisionShape()->setLocalScaling(btVector3(
-        //             comp.transform->matrix->scale3D().x() * comp.collider->Width * 0.5f,
-        //             comp.transform->matrix->scale3D().y() * comp.collider->Length * 0.5f,
-        //             comp.transform->matrix->scale3D().z() * comp.collider->Height * 0.5f));
-        //     }
-
-        //     if (comp.rigidbody.Gravity) {
-        //         body->setGravity(btVector3(Gravity->x, Gravity->y, Gravity->z));
-        //     } else {
-        //         body->setGravity(btVector3(0, 0, 0));
-        //     }
-
-        //     comp.rigidbody.velocity->x = body->getLinearVelocity().x();
-        //     comp.rigidbody.velocity->y = body->getLinearVelocity().y();
-        //     comp.rigidbody.velocity->z = body->getLinearVelocity().z();
-
-        //     comp.rigidbody.angularVelocity->x = body->getAngularVelocity().x();
-        //     comp.rigidbody.angularVelocity->y = body->getAngularVelocity().y();
-        //     comp.rigidbody.angularVelocity->z = body->getAngularVelocity().z();
-
-        //     btVector3 linearFactor(1, 1, 1);
-        //     if (comp.rigidbody.freezePositionX) linearFactor.setX(0);
-        //     if (comp.rigidbody.freezePositionY) linearFactor.setY(0);
-        //     if (comp.rigidbody.freezePositionZ) linearFactor.setZ(0);
-        //     body->setLinearFactor(linearFactor);
-
-        //     btVector3 angularFactor(1, 1, 1);
-        //     if (comp.rigidbody.freezeRotationX) angularFactor.setX(0);
-        //     if (comp.rigidbody.freezeRotationY) angularFactor.setY(0);
-        //     if (comp.rigidbody.freezeRotationZ) angularFactor.setZ(0);
-        //     body->setAngularFactor(angularFactor);
-
-        //     if (comp.rigidbody.Kinematics) {
-        //         body->setCollisionFlags(body->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-        //         body->setActivationState(DISABLE_DEACTIVATION);
-        //     } else {
-        //         body->setCollisionFlags(body->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
-        //         body->setActivationState(ACTIVE_TAG);
-        //     }
-        // }
     }
     Profiler::currentFrame->dynamicTime = dynamicTime;
     Profiler::currentFrame->SensorTime = sensorTime;
@@ -1240,50 +1060,5 @@ void Simulation::entityUpdate(QString ID) {
     std::string key = ID.toStdString();
     auto physIt = physicsComponent.find(key);
     if (physIt == physicsComponent.end()) return;
-
-    auto bulletIt = bulletBodies.find(key);
-    if (bulletIt == bulletBodies.end()) return;
-
-    btRigidBody* body = bulletIt->second;
-    PhysicsComponent& comp = physIt->second;
-
-    if (body && comp.transform) {
-        btTransform trans;
-        body->getMotionState()->getWorldTransform(trans);
-
-        trans.setOrigin(btVector3(
-            comp.transform->matrix.translation().x(),
-            comp.transform->matrix.translation().y(),
-            comp.transform->matrix.translation().z()));
-
-        btQuaternion quat;
-        quat.setEulerZYX(
-            qDegreesToRadians(comp.transform->toEulerAngles().z()),
-            qDegreesToRadians(comp.transform->toEulerAngles().y()),
-            qDegreesToRadians(comp.transform->toEulerAngles().x()));
-        trans.setRotation(quat);
-
-        body->setWorldTransform(trans);
-
-        if (comp.collider) {
-            body->getCollisionShape()->setLocalScaling(btVector3(
-                comp.transform->matrix.scale3D().x() * comp.collider->getDimension().Width * 0.5f,
-                comp.transform->matrix.scale3D().y() * comp.collider->getDimension().Length * 0.5f,
-                comp.transform->matrix.scale3D().z() * comp.collider->getDimension().Height * 0.5f));
-        }
-
-        comp.rigidbody->velocity->x = body->getLinearVelocity().x();
-        comp.rigidbody->velocity->y = body->getLinearVelocity().y();
-        comp.rigidbody->velocity->z = body->getLinearVelocity().z();
-
-        comp.rigidbody->angularVelocity->x = body->getAngularVelocity().x();
-        comp.rigidbody->angularVelocity->y = body->getAngularVelocity().y();
-        comp.rigidbody->angularVelocity->z = body->getAngularVelocity().z();
-
-        if (body->getMotionState()) {
-            body->getMotionState()->setWorldTransform(trans);
-        }
-    }
-
     emit HierarchyUpdate();
 }

@@ -126,12 +126,19 @@ void EODisplay::selectEntity(Entity* entit)
 
     sensor = nullptr;
 
+    glDisplay->resetLandOrigin();
+
     for (auto const& pair : entity->sensors.sensors) {
         Sensor* s = pair.second;
 
         if (s && s->subType == Sensor::SubType::EO) {
             sensor = s;
             sensorId = QString::fromStdString(s->ID);
+
+            std::unordered_map<std::string, Entity::Category> cats;
+            if (EOSensor* eoSensor = dynamic_cast<EOSensor*>(s)) {
+                cats = eoSensor->EODetectionCategory;
+            }
 
             glDisplay->setSensorParameter(
                 sensor->sensorPoseGeo,
@@ -235,11 +242,20 @@ void EODisplay::updateRadar()
 
     setRange(currentSensor->range);
 
+    std::unordered_map<std::string, Entity::Category> cats;
+
+    if (EOSensor* eoSensor = dynamic_cast<EOSensor*>(currentSensor)) {
+        eoSensor->gimbalAzimuthOffset   = glDisplay->getCurrentAzimuth();
+        eoSensor->gimbalElevationOffset = glDisplay->getCurrentElevation();
+        cats = eoSensor->EODetectionCategory;
+    }
+
     glDisplay->setSensorParameter(
         currentSensor->sensorPoseGeo,
         currentSensor->azimuth,
         currentSensor->EODetectionCoord,
-        currentSensor->range * 1000.0f // range is stored in km — see eosensor.cpp
+        currentSensor->range * 1000.0f, // range is stored in km — see eosensor.cpp
+        cats
         );
 
     // GIMBAL-AWARE DETECTION: push the operator's current gimbal pointing
@@ -250,10 +266,7 @@ void EODisplay::updateRadar()
     // dynamic_cast guards against currentSensor being some other Sensor
     // subtype (e.g. IR) that doesn't have gimbal offset members — in that
     // case this safely does nothing rather than crashing.
-    if (EOSensor* eoSensor = dynamic_cast<EOSensor*>(currentSensor)) {
-        eoSensor->gimbalAzimuthOffset   = glDisplay->getCurrentAzimuth();
-        eoSensor->gimbalElevationOffset = glDisplay->getCurrentElevation();
-    }
+
 
     glDisplay->update();
 }

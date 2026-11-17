@@ -16,12 +16,20 @@
 #include <core/Debug/console.h>
 #include <cmath>
 
+static QString jsonValueToString(const QJsonValue& v)
+{
+    if (v.isObject())  return jsonValueToString(v.toObject().value("value"));
+    if (v.isString())  return v.toString();
+    if (v.isDouble())  return QString::number(v.toDouble());
+    return QString();
+}
+
 /**
  * @brief Constructs a Formation entity.
  * @param h Pointer to the parent Hierarchy.
  */
 Formation::Formation(Hierarchy* h)
-    : Entity(h), formationType(Constants::FormationType::Line), count(0),
+    : Entity(h), formationType(Constants::FormationType::Line), count(0), scale(1.0f),
     mothership(nullptr), formationPositions(new std::unordered_map<std::string,FormationPosition*>())
 {
 }
@@ -30,43 +38,44 @@ Formation::~Formation(){
     clear();
 }
 
-void Formation::clear(){
-    // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
-    if(mothership){
-        if(mothership->entity){
-            if (root && root->Entities.find(mothership->entity->ID) != root->Entities.end()) {
-                Platform* p = dynamic_cast<Platform*>(mothership->entity);
-                // if(p->dynamicModel)
-                    p->dynamicModel.formation = nullptr;
-            }else{
-                qDebug()<<"this entity not exist";
-            }
+void Formation::clear()
+{
+    // mothership
+    if (mothership) {
+        if (isLiveEntity(mothership->entity)) {
+            if (Platform* p = dynamic_cast<Platform*>(mothership->entity))
+                p->dynamicModel.formation = nullptr;
         }
-        emit root->componentRemoved(QString::fromStdString(ID), QString::fromStdString("mothership"));
-        delete mothership;
+        FormationPosition* ms = mothership;
         mothership = nullptr;
+        if (root) emit root->componentRemoved(QString::fromStdString(ID), "mothership");
+        delete ms;
     }
-    if(!formationPositions)return;
-    for ( auto& pair : *formationPositions) {
-        if(pair.second && pair.second->entity){
-            if (root && root->Entities.find(pair.second->entity->ID) != root->Entities.end()) {
-                Platform* platform = dynamic_cast<Platform*>(pair.second->entity);
-                if (platform /*&& platform->dynamicModel */) {
-                    platform->dynamicModel.followEntity = nullptr;
-                    platform->dynamicModel.formationPosition = nullptr;
-                    platform->dynamicModel.follow = false;
-                }
-            }
-            emit root->componentRemoved(QString::fromStdString(ID), QString::fromStdString(pair.first));
-            delete pair.second;
-            pair.second = nullptr; // Dangling pointer safety
-        }
-    }
-    formationPositions->clear(); // Container ko reset karein
-    delete formationPositions;
-    formationPositions = nullptr;
-}
 
+    if (!formationPositions) return;
+
+    auto* positions = formationPositions;
+    formationPositions = nullptr;
+
+    for (auto& pair : *positions) {
+        FormationPosition* pos = pair.second;
+        if (!pos) continue;
+
+        if (isLiveEntity(pos->entity)) {
+            if (Platform* platform = dynamic_cast<Platform*>(pos->entity)) {
+                platform->dynamicModel.followEntity      = nullptr;
+                platform->dynamicModel.formationPosition = nullptr;
+                platform->dynamicModel.formation         = nullptr;
+                platform->dynamicModel.follow            = false;
+            }
+        }
+        if (root) emit root->componentRemoved(QString::fromStdString(ID),
+                                        QString::fromStdString(pair.first));
+        delete pos;
+    }
+    positions->clear();
+    delete positions;
+}
 /**
  * @brief Spawns the formation entity into the hierarchy.
  * Registers the entity and creates the mothership component.
@@ -95,6 +104,7 @@ void Formation::addSupportedcomponent(){
  * Includes formation metadata, mothership, positions, and formation type.
  * @return QJsonObject containing the formation data.
  */
+
 QJsonObject Formation::toJson() const
 {
     QJsonObject obj;
@@ -103,18 +113,23 @@ QJsonObject Formation::toJson() const
     obj["id"]        = QString::fromStdString(ID);
     obj["parent_id"] = QString::fromStdString(parentID);
     obj["active"]    = Active;
-    obj["count"]     = QString::number(count);
+    QJsonObject cou = toParm(count,"int",0,50);
+    cou["editable"] = false;
+    obj["count"]     = cou;
+    obj["scale"]     = QString::number(scale, 'f', 2);
 
     // ── Mothership ────────────────────────────────────────────────────
     if (mothership) {
         if (mothership->entity &&
             root &&
             root->Entities.find(mothership->entity->ID) != root->Entities.end()) {
-            obj["mothership"] = mothership->toJson();
+            QJsonObject oo = mothership->toJson();
+            oo["visible"] = false;
+            obj["mothership"] = oo;
         } else if (mothership->Offset) {
-            // entity link nahi – sirf offset (rare)
             QJsonObject ms;
             QJsonObject offsetObj;
+
             offsetObj["x"] = mothership->Offset->x;
             offsetObj["y"] = mothership->Offset->y;
             offsetObj["z"] = mothership->Offset->z;
@@ -136,13 +151,11 @@ QJsonObject Formation::toJson() const
 
             QJsonObject posObj;
 
-            // Case A: entity linked hai (Scenario / Runtime)
             if (position->entity &&
                 root &&
                 root->Entities.find(position->entity->ID) != root->Entities.end()) {
                 posObj = position->toJson();
             }
-            // Case B: template mode (Database Editor canvas) – sirf Offset
             else if (position->Offset) {
                 QJsonObject offsetObj;
                 offsetObj["x"] = position->Offset->x;
@@ -207,19 +220,28 @@ void Formation::fromJson(const QJsonObject& obj) {
         Active = obj["active"].toBool();
     }
     if(obj.contains("count")){
-        count = obj["count"].toString().toInt();
+        count = jsonValueToString(obj["count"]).toInt();
     }
 
-    // Deserialize mothership
+    // scale read
+    bool scaleChanged = false;
+    if (obj.contains("scale")) {
+        const QJsonValue sv = obj["scale"];
+        float s = sv.isDouble() ? (float)sv.toDouble()
+                                : jsonValueToString(sv).toFloat();
+        if (s > 0.0f && !qFuzzyCompare(s, scale)) {
+            scale = s;
+            scaleChanged = true;
+        }
+    }
+
     if (obj.contains("mothership") && obj["mothership"].isObject()) {
         if (!mothership) mothership = new FormationPosition();
         mothership->fromJson(obj["mothership"].toObject());
 
-        // Resolve mothership entity
         resolveEntityReference(mothership, obj["mothership"].toObject());
     }
 
-    // Deserialize formation positions
     if (obj.contains("formationPositions") && obj["formationPositions"].isArray()) {
         QJsonArray positionsArray = obj["formationPositions"].toArray();
         if(formationPositions){
@@ -261,22 +283,20 @@ void Formation::fromJson(const QJsonObject& obj) {
                     }
                 }
             }
-
         }
     }
+
     // Deserialize formation type
+    bool typeChanged = false;
     if (obj.contains("Formation_Type") && obj["Formation_Type"].isObject()) {
         QJsonObject typeObj = obj["Formation_Type"].toObject();
-        QString typeVal = typeObj["value"].toString();
-        Constants::FormationType last  = formationType;
-        formationType = stringToFormationType(typeVal);
-        if(formationType !=last){
-            FormationTypeUpdate();
-        }
-
+        Constants::FormationType last = formationType;
+        formationType = stringToFormationType(typeObj["value"].toString());
+        typeChanged = (formationType != last);
     }
+    if (typeChanged || scaleChanged)
+        FormationTypeUpdate();
 }
-
 void Formation::FormationTypeUpdate()
 {
     if (!formationPositions)
@@ -285,52 +305,56 @@ void Formation::FormationTypeUpdate()
     if (formationType == Constants::FormationType::Custom)
         return;
 
-    float spacing = 0.5f;
-    int i = 0;
+    const float spacing = 0.5f * scale;
 
     for (auto& pair : *formationPositions) {
         FormationPosition* pos = pair.second;
         if (!pos || !pos->Offset)
             continue;
+
+        int i = 0;
+        if (pair.first.rfind("ally_", 0) == 0) {
+            try { i = std::stoi(pair.first.substr(5)); }
+            catch (...) { continue; }
+        }
+
         pos->Offset->y = 0;
-        // 1. LINE (Horizontal spread)
+
+        // 1. LINE
         if (formationType == Constants::FormationType::Line) {
             float side = (i % 2 == 0) ? -1.0f : 1.0f;
             float multiplier = (i / 2) + 1;
             pos->Offset->x = side * spacing * multiplier;
-            pos->Offset->z = 0;
-            pos->Offset->z += 2.2f;
+            pos->Offset->z = 2.2f;
         }
-        // 2. V (Trailing edges)
+        // 2. V
         else if (formationType == Constants::FormationType::V) {
             float side = (i % 2 == 0) ? -1.0f : 1.0f;
             float multiplier = (i / 2) + 1;
             pos->Offset->x = side * spacing * multiplier;
             pos->Offset->z = -spacing * multiplier;
         }
-        // 3. DIAMOND (Hollow / Outline)
+        // 3. DIAMOND
         else if (formationType == Constants::FormationType::Diamond) {
             if (count == 1) {
                 pos->Offset->x = 0;
                 pos->Offset->z = 0;
-                // do NOT return – continue with next positions
             } else {
                 float radius = spacing * (count / 4.0f + 1);
                 float t = (float)i / (float)count;
-                float x = 0.0f;
-                float z = 0.0f;
+                float x = 0.0f, z = 0.0f;
 
-                if (t < 0.25f) {               // Top → Right
+                if (t < 0.25f) {
                     float u = t / 0.25f;
                     x =  u * radius;
                     z = -radius + u * radius;
                 }
-                else if (t < 0.50f) {          // Right → Bottom
+                else if (t < 0.50f) {
                     float u = (t - 0.25f) / 0.25f;
                     x =  radius - u * radius;
                     z =  u * radius;
                 }
-                else if (t < 0.75f) {          // Bottom → Left
+                else if (t < 0.75f) {
                     float u = (t - 0.50f) / 0.25f;
                     x = -u * radius;
                     z =  radius - u * radius;
@@ -344,7 +368,7 @@ void Formation::FormationTypeUpdate()
                 pos->Offset->z = z;
             }
         }
-        // 4. SQUARE (Outline)
+        // 4. SQUARE
         else if (formationType == Constants::FormationType::Square) {
             int pointsPerSide = std::ceil((float)count / 4.0f);
             if (pointsPerSide < 1) pointsPerSide = 1;
@@ -356,66 +380,47 @@ void Formation::FormationTypeUpdate()
             float x = 0, z = 0;
 
             switch (side) {
-            case 0: // TOP
-                x = -halfSide + step;
-                z =  halfSide;
-                break;
-            case 1: // RIGHT
-                x =  halfSide;
-                z =  halfSide - step;
-                break;
-            case 2: // BOTTOM
-                x =  halfSide - step;
-                z = -halfSide;
-                break;
-            case 3: // LEFT
-                x = -halfSide;
-                z = -halfSide + step;
-                break;
-            default: // safety
-                x = 0; z = 0;
-                break;
+            case 0: x = -halfSide + step; z =  halfSide;        break;
+            case 1: x =  halfSide;        z =  halfSide - step; break;
+            case 2: x =  halfSide - step; z = -halfSide;        break;
+            case 3: x = -halfSide;        z = -halfSide + step; break;
+            default: x = 0; z = 0; break;
             }
             pos->Offset->x = x;
             pos->Offset->z = z;
         }
-        // 5. COLUMN (Single file)
+        // 5. COLUMN
         else if (formationType == Constants::FormationType::Column) {
             pos->Offset->x = 0;
-            pos->Offset->z = -spacing * (i + 1);
-            pos->Offset->z += 2.1f;
+            pos->Offset->z = -spacing * (i + 1) + 2.1f;
         }
         // 6. ECHELON LEFT
         else if (formationType == Constants::FormationType::EchelonLeft) {
             pos->Offset->x =  spacing * (i + 1);
-            pos->Offset->z = -spacing * (i + 1);
-            pos->Offset->z += 2.1f;
+            pos->Offset->z = -spacing * (i + 1) + 2.1f;
         }
         // 7. ECHELON RIGHT
         else if (formationType == Constants::FormationType::EchelonRight) {
             pos->Offset->x = -spacing * (i + 1);
-            pos->Offset->z = -spacing * (i + 1);
-            pos->Offset->z += 2.1f;
+            pos->Offset->z = -spacing * (i + 1) + 2.1f;
         }
         // 8. STAGGERED COLUMN
         else if (formationType == Constants::FormationType::StaggeredColumn) {
             pos->Offset->x = (i % 2 == 0) ? spacing : -spacing;
-            pos->Offset->z = -spacing * (i + 1);
-            pos->Offset->z += 2.0f;
+            pos->Offset->z = -spacing * (i + 1) + 2.0f;
         }
         // 9. WEDGE
         else if (formationType == Constants::FormationType::Wedge) {
             float side = (i % 2 == 0) ? -1.0f : 1.0f;
             int row = (i / 2) + 1;
             pos->Offset->x = side * spacing * row;
-            pos->Offset->z = -spacing * row;
-            pos->Offset->z += 2.0f;
+            pos->Offset->z = -spacing * row + 2.0f;
         }
-        // 10. COIL (Archimedean spiral)
+        // 10. COIL
         else if (formationType == Constants::FormationType::Coil) {
             const float angleStep    = 0.7f;
             const float startRadius  = 1.2f;
-            const float radiusGrowth = 0.55f;
+            const float radiusGrowth = 0.55f * scale;
 
             float angle  = i * angleStep;
             float radius = startRadius + i * radiusGrowth;
@@ -425,20 +430,20 @@ void Formation::FormationTypeUpdate()
         }
         // 11. HERRINGBONE
         else if (formationType == Constants::FormationType::Herringbone) {
-            int   row  = i / 2;
-            float side = (i % 2 == 0) ? -1.0f : 1.0f;
+            int   row   = i / 2;
+            float side  = (i % 2 == 0) ? -1.0f : 1.0f;
             float width = (row % 2 == 0) ? 1.6f : 0.7f;
             pos->Offset->x = side * spacing * width * (row + 1);
             pos->Offset->z = -spacing * (row + 1);
         }
-        // 12. SKIRMISH (loose irregular line)
+        // 12. SKIRMISH
         else if (formationType == Constants::FormationType::Skirmish) {
             float side       = (i % 2 == 0) ? -1.0f : 1.0f;
             float multiplier = (i / 2) + 1;
             pos->Offset->x = side * spacing * multiplier * 1.3f;
             pos->Offset->z = -spacing * 0.4f * (1 + (i % 3));
         }
-        // 13. BOX (filled rectangle)
+        // 13. BOX
         else if (formationType == Constants::FormationType::BoxFormation) {
             int cols = std::max(2, (int)std::ceil(std::sqrt((float)count)));
             int rows = (count + cols - 1) / cols;
@@ -449,19 +454,24 @@ void Formation::FormationTypeUpdate()
             pos->Offset->x = -halfW + col * spacing;
             pos->Offset->z = -halfD + row * spacing;
         }
-
-        i++;
     }
 }
-
 /**
  * @brief Dynamically creates formation positions based on the current type and count.
  * Calculates offsets for each ally slot and adds them as components.
+ * Existing entity bindings are preserved by slot name (ally_i).
  */
 void Formation::formationCreate()
 {
     if (!formationPositions)
         return;
+
+    // 0. Snapshot: slot name -> entity (cleanup se pehle)
+    std::unordered_map<std::string, Entity*> saved;
+    for (const auto& pair : *formationPositions) {
+        if (pair.second && isLiveEntity(pair.second->entity))
+            saved[pair.first] = pair.second->entity;
+    }
 
     // 1. Cleanup
     std::vector<std::string> keysToRemove;
@@ -471,12 +481,13 @@ void Formation::formationCreate()
     for (const auto& name : keysToRemove) {
         removeComponent(name);
     }
-    if (formationPositions) {
-        formationPositions->clear();
-    }
+    formationPositions->clear();
 
     // 2. Dynamic Generation
-    float spacing = 0.5f;
+    Platform* mother = (mothership && mothership->entity)
+                           ? dynamic_cast<Platform*>(mothership->entity) : nullptr;
+    const float spacing = 0.5f * scale;
+
     for (int i = 0; i < count; i++) {
         std::string name = "ally_" + std::to_string(i);
         addComponent(name);
@@ -485,6 +496,20 @@ void Formation::formationCreate()
             continue;
 
         pos->Offset->y = 0;
+
+        // Purani entity wapas bind karo
+        auto sit = saved.find(name);
+        if (sit != saved.end()) {
+            pos->entity = sit->second;
+            if (Platform* p = dynamic_cast<Platform*>(pos->entity)) {
+                p->dynamicModel.formation         = this;
+                p->dynamicModel.formationPosition = pos;
+                if (mother) {
+                    p->dynamicModel.followEntity = mother;
+                    p->dynamicModel.follow       = true;
+                }
+            }
+        }
 
         if (formationType == Constants::FormationType::Line) {
             float side = (i % 2 == 0) ? -1.0f : 1.0f;
@@ -506,7 +531,6 @@ void Formation::formationCreate()
                 float radius = spacing * (count / 4.0f + 1);
                 float t = (float)i / (float)count;
                 float x = 0.0f, z = 0.0f;
-
                 if (t < 0.25f) {
                     float u = t / 0.25f;
                     x =  u * radius;
@@ -541,9 +565,9 @@ void Formation::formationCreate()
             float step       = (float)indexOnSide / (float)pointsPerSide * sideLength;
             float x = 0, z = 0;
             switch (side) {
-            case 0: x = -halfSide + step; z =  halfSide; break;
+            case 0: x = -halfSide + step; z =  halfSide;        break;
             case 1: x =  halfSide;        z =  halfSide - step; break;
-            case 2: x =  halfSide - step; z = -halfSide; break;
+            case 2: x =  halfSide - step; z = -halfSide;        break;
             case 3: x = -halfSide;        z = -halfSide + step; break;
             default: x = 0; z = 0; break;
             }
@@ -572,11 +596,10 @@ void Formation::formationCreate()
             pos->Offset->x = side * spacing * row;
             pos->Offset->z = -spacing * row;
         }
-        // 10. COIL (Archimedean spiral)
         else if (formationType == Constants::FormationType::Coil) {
             const float angleStep    = 0.7f;
             const float startRadius  = 1.2f;
-            const float radiusGrowth = 0.55f;
+            const float radiusGrowth = 0.55f * scale;
 
             float angle  = i * angleStep;
             float radius = startRadius + i * radiusGrowth;
@@ -587,9 +610,7 @@ void Formation::formationCreate()
         else if (formationType == Constants::FormationType::Herringbone) {
             int   row  = i / 2;
             float side = (i % 2 == 0) ? -1.0f : 1.0f;
-
             float width = (row % 2 == 0) ? 1.6f : 0.7f;
-
             pos->Offset->x = side * spacing * width * (row + 1);
             pos->Offset->z = -spacing * (row + 1);
         }
@@ -610,7 +631,13 @@ void Formation::formationCreate()
             pos->Offset->z = -halfD + row * spacing;
         }
     }
+
+    if (root)
+        emit root->entityComponentUpdate(QString::fromStdString(ID),
+                                         QStringLiteral("formationPositions"),
+                                         QJsonObject());
 }
+
 /**
  * @brief Adds a formation position component.
  * @param name Name of the position (e.g., "mothership" or "ally_0").
@@ -619,7 +646,6 @@ void Formation::addComponent(std::string name) {
     // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
     FormationPosition* fp = new FormationPosition();
 
-    // Generate unique component ID using formation ID + position name
     std::string componentID = ID + "_" + name;
 
     if(name == "mothership"){
@@ -635,13 +661,32 @@ void Formation::addComponent(std::string name) {
 
 /**
  * @brief Removes a formation position component.
+ * Detaches the bound platform (if any) and frees the position.
  * @param name Name of the position to remove.
  */
-void Formation::removeComponent(std::string name) {
-    // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
-    if(!formationPositions)return;
-    (*formationPositions).erase(name);
-    emit root->componentRemoved(QString::fromStdString(ID), QString::fromStdString(name));
+void Formation::removeComponent(std::string name)
+{
+    if (!formationPositions) return;
+
+    auto it = formationPositions->find(name);
+    if (it == formationPositions->end()) return;
+
+    FormationPosition* pos = it->second;
+    formationPositions->erase(it);
+
+    if (pos && isLiveEntity(pos->entity)) {
+        if (Platform* p = dynamic_cast<Platform*>(pos->entity)) {
+            p->dynamicModel.followEntity      = nullptr;
+            p->dynamicModel.formationPosition = nullptr;
+            p->dynamicModel.formation         = nullptr;
+            p->dynamicModel.follow            = false;
+        }
+    }
+    delete pos;
+
+    if (root)
+        emit root->componentRemoved(QString::fromStdString(ID),
+                                    QString::fromStdString(name));
 }
 
 /**
@@ -657,12 +702,8 @@ QJsonObject Formation::getComponent(std::string name) {
         if(!formationPositions)return QJsonObject();
         if (formationPositions->find(name) != formationPositions->end()) {
             FormationPosition* pos = (*formationPositions)[name];
-            qDebug() << "Getting component:" << name.c_str();
-            qDebug() << "Position has Offset:" << (pos->Offset ? "Yes" : "No");
             if (pos->Offset) {
-                qDebug() << "Offset values: x=" << pos->Offset->x
-                         << " y=" << pos->Offset->y
-                         << " z=" << pos->Offset->z;
+
             }
             qDebug() << "JSON output:" << pos->toJson();
             return pos->toJson();
@@ -678,22 +719,94 @@ QJsonObject Formation::getComponent(std::string name) {
  * @param obj JSON object containing update data.
  */
 void Formation::updateComponent(QString name, const QJsonObject& obj) {
-    // 1. Handle Formation Type change
-    if (name == "type") {
-        if (obj.contains("value")) {
-            formationType = stringToFormationType(obj["value"].toString());
-            formationCreate(); // Re-apply geometric logic to existing count
+
+    // 0. Whole-formation update from Inspector ("<name>_self")
+    if (name.endsWith("_self")) {
+        bool needRecreate = false;
+        bool needLayout   = false;
+
+        if (obj.contains("active"))
+            Active = obj["active"].toBool();
+
+        if (obj.contains("count")) {
+            bool ok = false;
+            int newCount = jsonValueToString(obj["count"]).toInt(&ok);
+            if (ok && newCount >= 0 && newCount != count) {
+                count = newCount;
+                needRecreate = true;
+            }
+        }
+
+        if (obj.contains("scale")) {
+            const QJsonValue v = obj["scale"];
+            float s = v.isDouble() ? (float)v.toDouble()
+                                   : jsonValueToString(v).toFloat();
+            if (s > 0.0f && !qFuzzyCompare(s, scale)) {
+                scale = s;
+                needLayout = true;
+            }
+        }
+
+        if (obj.contains("Formation_Type")) {
+            const QString s = jsonValueToString(obj["Formation_Type"]);
+            if (!s.isEmpty()) {
+                Constants::FormationType t = stringToFormationType(s);
+                if (t != formationType) {
+                    formationType = t;
+                    needLayout = true;
+                }
+            }
+        }
+
+        if (needRecreate)
+            formationCreate();
+        else if (needLayout) {
+            FormationTypeUpdate();
+            if (root)
+                emit root->entityComponentUpdate(QString::fromStdString(ID),
+                                                 QStringLiteral("formationPositions"),
+                                                 QJsonObject());
         }
         return;
     }
 
-    // 2. Handle Count change (Integration for increasing allies)
+    if (name == "type") {
+        if (obj.contains("value")) {
+            formationType = stringToFormationType(obj["value"].toString());
+            FormationTypeUpdate();
+            if (root)
+                emit root->entityComponentUpdate(QString::fromStdString(ID),
+                                                 QStringLiteral("formationPositions"),
+                                                 QJsonObject());
+        }
+        return;
+    }
+
+    // 2. Count change
     if (name == "count") {
         if (obj.contains("value")) {
-            int newCount = obj["value"].toString().toInt();
-            if (newCount >= 0) {
+            bool ok = false;
+            int newCount = jsonValueToString(obj["value"]).toInt(&ok);
+            if (ok && newCount >= 0) {
                 this->count = newCount;
-                formationCreate(); // Dynamically add/remove ally slots
+                formationCreate();
+            }
+        }
+        return;
+    }
+
+    // 2b. Scale change
+    if (name == "scale") {
+        if (obj.contains("value")) {
+            const QJsonValue v = obj["value"];
+            float s = v.isString() ? v.toString().toFloat() : (float)v.toDouble();
+            if (s > 0.0f) {
+                scale = s;
+                FormationTypeUpdate();
+                if (root)
+                    emit root->entityComponentUpdate(QString::fromStdString(ID),
+                                                     QStringLiteral("formationPositions"),
+                                                     QJsonObject());
             }
         }
         return;
@@ -705,7 +818,6 @@ void Formation::updateComponent(QString name, const QJsonObject& obj) {
             QJsonObject entityObj = obj["entity"].toObject();
             if (entityObj.contains("id")) {
                 std::string id = entityObj["id"].toString().toStdString();
-                // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
                 if (root && root->Entities.find(id) != root->Entities.end()) {
                     mothership->entity = (root->Entities)[id];
                 }
@@ -715,7 +827,7 @@ void Formation::updateComponent(QString name, const QJsonObject& obj) {
         return;
     }
 
-    // 4. Handle Individual Ally updates (Assignment of entities to slots)
+    // 4. Handle Individual Ally updates
     if (!formationPositions) return;
     std::string key = name.toStdString();
     auto it = formationPositions->find(key);
@@ -726,14 +838,12 @@ void Formation::updateComponent(QString name, const QJsonObject& obj) {
         QJsonObject entityObj = obj["entity"].toObject();
         if (entityObj.contains("id")) {
             std::string id = entityObj["id"].toString().toStdString();
-            // Hierarchy* parent = GlobalRegistry::getParentHierarchy(this);
             if (root && root->Entities.find(id) != root->Entities.end()) {
                 pos->entity = root->Entities[id];
 
-                // Link the platform's dynamic model to the formation logic
                 Platform* platform = dynamic_cast<Platform*>(pos->entity);
-                Platform* mother = dynamic_cast<Platform*>(mothership->entity);
-                if (platform /*&& platform->dynamicModel*/ && mother) {
+                Platform* mother = mothership ? dynamic_cast<Platform*>(mothership->entity) : nullptr;
+                if (platform && mother) {
                     platform->dynamicModel.followEntity = mother;
                     platform->dynamicModel.formationPosition = pos;
                     platform->dynamicModel.follow = true;
@@ -849,6 +959,7 @@ void Formation::resolveEntityReference(FormationPosition* position, const QJsonO
         }
     }
 }
+
 bool Formation::isMothershipEntity(const QString& entityId) const
 {
     if (entityId.isEmpty() || !mothership || !mothership->entity)
@@ -1004,7 +1115,6 @@ void Formation::breakFormation()
         }
     }
 
-
     emit root->entityUpdate(QString::fromStdString(ID));
     emit root->entityComponentUpdate(
         QString::fromStdString(ID),
@@ -1053,4 +1163,12 @@ void Formation::resumeFormation()
         QString::fromStdString(ID),
         QStringLiteral("formationPositions"),
         QJsonObject());
+}
+bool Formation::isLiveEntity(Entity* e) const
+{
+    if (!e || !root) return false;
+    for (const auto& kv : root->Entities) {
+        if (kv.second == e) return true;
+    }
+    return false;
 }

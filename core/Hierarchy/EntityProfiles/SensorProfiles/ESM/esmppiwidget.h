@@ -19,8 +19,15 @@
 #include <QString>
 #include <QWidget>
 
-class ESMObservationModel;
+class ESMObservationModel;    // bool eventFilter(QObject* watched, QEvent* event) override;
+
 struct ESMObservation;
+
+//Vansh added forward decelarations
+class QLabel;
+class QResizeEvent;
+class QObject;
+//Vansh
 
 class ESMPpiWidget : public QWidget
 {
@@ -48,6 +55,11 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
 
+    //Vansh added two declarations
+    void resizeEvent(QResizeEvent* event) override;
+    // bool eventFilter(QObject* watched, QEvent* event) override;
+    //Vansh
+
 private slots:
     void onModelChanged();
 
@@ -57,6 +69,10 @@ private:
                       QPointF& out) const;
     int hitTest(const QPoint& pos) const;
 
+    //Vansh added a helper function
+    void updatePinnedInfo();
+    //Vansh
+
     void drawScope(class QPainter& p, const QPointF& c, double R) const;
     void drawObservations(class QPainter& p, const QPointF& c, double R) const;
 
@@ -64,6 +80,10 @@ private:
     int ringCount_ = 3;
     int hovered_ = -1;
     QString selectedKey_;
+
+    //Vansh added
+    QLabel* pinnedInfoLabel_ = nullptr;
+    //Vansh
 };
 
 #endif // ESMPPIWIDGET_H

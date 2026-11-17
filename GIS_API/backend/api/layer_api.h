@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QMap>
 
 class LayerApi : public QObject {
     Q_OBJECT
@@ -52,6 +53,8 @@ private:
     explicit LayerApi(QObject* parent = nullptr);
     ~LayerApi();
     static LayerApi* m_instance;
+    QMap<QString, QString> m_importedPathToLayerId;
+    void forgetImportedPathForLayer(const QString& layerId);
 };
 
 #endif

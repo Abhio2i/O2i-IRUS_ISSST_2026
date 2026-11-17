@@ -185,10 +185,8 @@ private:
     bool m_isDraggingWaypoint = false;
     QPointF m_waypointDragStartCanvas;
     QVector<EditableWaypoint> m_editWaypoints;
-    // ==================== (distance/angle preview) START ====================
     QPointF m_currentEditMousePos;
     bool    m_hasEditMousePos = false;
-    // ==================== (distance/angle preview) END ======================
 
     QHash<QString, QColor> m_trajectoryColors;
     void drawSelectedEntityTrajectory(QPainter& painter);
@@ -204,7 +202,13 @@ private:
     int m_highlightedWaypointIndex = -1;
     QString m_highlightedWaypointEntityId;
     void drawRadioMessages(QPainter& painter);
-        QSet<ECS::Entity> m_lastSelectionSnapshot;
+    QSet<ECS::Entity> m_lastSelectionSnapshot;
+    void onApplyDefaultPatternRequested(const QString& hierarchyId, const QString& pattern);
+    bool    m_isScaling = false;
+    QPointF m_scalePivotCanvas;
+    QHash<ECS::Entity, float> m_dragStartScales;
+    void updateScale(const QPointF& canvasPos);
+    void drawScaleGizmo(QPainter& painter, const QPointF& canvasPos) const;
 };
 
 #endif // EDITORCANVAS_H

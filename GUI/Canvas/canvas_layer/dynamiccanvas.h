@@ -28,7 +28,9 @@ public:
     void setTrajectoriesVisible(bool visible);
     bool trajectoriesVisible() const { return m_showTrajectories; }
     void resetAtlas();
-        void setEditorCanvas(EditorCanvas* editor) { m_editor = editor; }
+    void setEditorCanvas(EditorCanvas* editor) { m_editor = editor; }
+    void setEntityZoomScaleEnabled(bool enabled);
+    bool entityZoomScaleEnabled() const { return m_entityZoomScale; }
 
 
 private:
@@ -41,8 +43,10 @@ private:
     bool m_showEntities = true;
     bool m_showSensors = true;
     bool m_showRadios = true;
-    bool m_showCollider = true;
-        EditorCanvas* m_editor = nullptr; // ARTI CHANGE
+    bool m_showCollider = false;
+    EditorCanvas* m_editor = nullptr;
+    bool  m_entityZoomScale = false;
+    float currentZoomFactor() const;
 };
 
 #endif // DYNAMICCANVAS_H

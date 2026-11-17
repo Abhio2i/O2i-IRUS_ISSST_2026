@@ -65,6 +65,10 @@
 #include <cmath>
 #include <memory>
 #include "core/Plugins/aesalogicregistry.h"
+// ===== [JAMMER] START - Added for ESM jammer, written by Aman =====
+#include "core/Hierarchy/EntityProfiles/SensorProfiles/esm.h"
+// ===== [JAMMER] END =====
+
 #ifdef AESA_REGRESSION_TEST
 extern "C" void aesa_test_seed_model(unsigned seed);
 extern "C" void aesa_test_seed_signal(unsigned seed);
@@ -143,6 +147,51 @@ static constexpr uint32_t MIN_RADAR_ID = 1u;
 // finite-difference velocity; suppresses float-position quantisation noise.
 // MODEL PARAMETER — default agreed for Phase 2c. REQ-AESA-004.
 static constexpr double VEL_SMOOTH_TAU_S = 0.5;
+
+// ===== [JAMMER] START - Added for ESM jammer, written by Aman =====
+// ESM jammer -> AESA model jammer: self-screening noise jammer on the
+// platform being detected. Deception fields keep their defaults (off).
+// REQ-AESA-060.
+// aesa::JammerConfig toAesaJammer(const ESMJammerConfig& j, double range_m, bool selfScreen)
+// {
+//     aesa::JammerConfig c;
+//     c.active        = true;
+//     c.type          = aesa::JammerType::NOISE;
+//     c.power_kW      = j.powerKw;
+//     c.gain_dBi      = j.gainDbi;
+//     c.bandwidth_Hz  = j.bandwidthMHz * 1.0e6;
+//     c.range_m       = range_m;
+//     c.selfScreening = true;
+//     return c;
+// }
+
+
+aesa::JammerConfig toAesaJammer(const ESMJammerConfig& j, double range_m, bool selfScreen)
+{
+    aesa::JammerConfig c;
+    c.active        = true;
+    c.type          = selfScreen ? aesa::JammerType::NOISE
+                        : aesa::JammerType::STAND_OFF_NOISE;
+    c.power_kW      = j.powerKw;
+    c.gain_dBi      = j.gainDbi;
+    c.bandwidth_Hz  = j.bandwidthMHz * 1.0e6;
+    c.range_m       = range_m;          // jammer→radar range (metres)
+    c.selfScreening = selfScreen;
+    return c;
+}
+
+
+// The model never checks jammer frequency, so the band check is done here:
+// the jammed band must cover the radar's frequency, or its whole hop band
+// when frequency agility is on. REQ-AESA-060.
+bool jammerCoversRadar(const ESMJammerConfig& j, const aesa::RadarConfig& cfg)
+{
+    if (cfg.frequencyAgility && cfg.hopStopFrequency > cfg.hopStartFrequency)
+        return j.coversBandMHz(cfg.hopStartFrequency / 1.0e6, cfg.hopStopFrequency / 1.0e6);
+    const double fMHz = cfg.frequency_Hz / 1.0e6;
+    return j.coversBandMHz(fMHz, fMHz);
+}
+// ===== [JAMMER] END =====
 
 } // anonymous namespace
 static float computeERP_dBm(const aesa::RadarConfig& cfg)
@@ -685,6 +734,98 @@ aesa::RadarPose AESARadar::buildPose() const
 // FUNCTION:    AESARadar::collectTargets
 // (Full description in header)
 // =============================================================================
+// std::vector<aesa::TargetInput> AESARadar::collectTargets(
+//     const QVector3D&                         ownPosKm,
+//     double                                   velDt,
+//     std::unordered_map<uint32_t, Platform*>& outIdMap) const
+// {
+//     std::vector<aesa::TargetInput> inputs;
+//     outIdMap.clear();
+
+//     if (!root) return inputs;
+//     inputs.reserve(root->Platforms.size());
+//     // ===== [JAMMER] START - Added for ESM jammer, written by Aman =====
+//     // Active ESM jammers covering this radar's band, keyed by platform ID.
+//     // Built once per scan. REQ-AESA-060.
+//     const aesa::RadarConfig radarCfg = radarCore_.getConfig();
+//     std::unordered_map<std::string, const ESMJammerConfig*> jammers;
+//     for (auto& [sid, s] : root->Sensors)
+//     {
+//         if (!s || !s->Active || !s->parentEntity || !s->parentEntity->Active) continue;
+//         if (s->subType != Sensor::SubType::ESM) continue;
+//         const ESM* esm = dynamic_cast<const ESM*>(s);
+//         if (!esm) continue;
+//         const ESMJammerConfig& j = esm->jammerConfig();
+//         if (!j.enabled || !jammerCoversRadar(j, radarCfg)) continue;
+//         jammers.emplace(s->parentEntity->ID, &j);   // first jammer on a platform wins
+//     }
+//     // ===== [JAMMER] END =====
+//     for (auto& [key, entity] : root->Platforms)
+//     {
+//         // Skip own platform and null entries. REQ-AESA-004.
+//         if (!entity || key == parentEntity->ID) continue;
+
+//         Platform* platform = entity;
+//         const QVector3D wpos = platform->transform.matrix.translation();
+
+//         aesa::TargetInput t;
+
+//         // ---- Position: relative to radar, stabilised frame ------------------
+//         // Engine world: x = East, y = Up, z = North (km).
+//         // Model: x = North, y = East, z = Up (m). No rotation by own attitude;
+//         // the model converts to body angles where the antenna needs them.
+//         // REQ-AESA-004.
+//         t.x = (static_cast<double>(wpos.z()) - static_cast<double>(ownPosKm.z())) * COORD_SCALE;
+//         t.y = (static_cast<double>(wpos.x()) - static_cast<double>(ownPosKm.x())) * COORD_SCALE;
+//         t.z = (static_cast<double>(wpos.y()) - static_cast<double>(ownPosKm.y())) * COORD_SCALE;
+
+//         t.id = platformToRadarID(key);
+//         outIdMap[t.id] = platform;
+
+//         // ---- Velocity: absolute, stabilised frame (m/s) ---------------------
+//         // Measured from position change over simulation time; valid for
+//         // every entity type. REQ-AESA-004.
+//         const std::array<double, 3> vW = updateVelocityEstimate(t.id, wpos, velDt);
+//         t.vx = vW[2];   // North = world z
+//         t.vy = vW[0];   // East  = world x
+//         t.vz = vW[1];   // Up    = world y
+
+//         // ---- Physical dimensions (unchanged) --------------------------------
+//         t.dimensions.length   = static_cast<double>(platform->collider.getDimension().Length);
+//         t.dimensions.height   = static_cast<double>(platform->collider.getDimension().Height);
+//         t.dimensions.width    = static_cast<double>(platform->collider.getDimension().Width);
+//         t.dimensions.valid    = true;
+//         t.dimensions.material = aesa::TargetMaterialType::METAL;
+//         t.dimensions.shape    = aesa::TargetShapeType::GENERIC;
+
+//         // ---- Target descriptor defaults (unchanged) -------------------------
+//         t.rcs          = 1.0;
+//         t.rcsTable     = {};
+//         t.platformType = "GENERIC";
+//         t.swerlingCase = aesa::SwerlingCase::CASE_I;
+//         t.surface      = aesa::SurfaceType::AIR;
+//         //t.jammer.active = false;
+//         // ===== [JAMMER] START - Added for ESM jammer, written by Aman =====
+//         // Replaces the old hardcoded "t.jammer.active = false;".
+//         // Jam this target if its platform carries an enabled ESM jammer and
+//         // this radar is within the jammer's range. REQ-AESA-060.
+//         auto jit = jammers.empty() ? jammers.end() : jammers.find(key);
+//         if (jit != jammers.end())
+//         {
+//             const double range_m = std::sqrt(t.x * t.x + t.y * t.y + t.z * t.z);
+//             if (range_m <= jit->second->jamRangeKm * 1000.0)
+//                 t.jammer = toAesaJammer(*jit->second, range_m);
+//         }
+//         // ===== [JAMMER] END =====
+//         inputs.push_back(t);
+//     }
+//     return inputs;
+// }
+
+
+
+
+
 std::vector<aesa::TargetInput> AESARadar::collectTargets(
     const QVector3D&                         ownPosKm,
     double                                   velDt,
@@ -695,6 +836,90 @@ std::vector<aesa::TargetInput> AESARadar::collectTargets(
 
     if (!root) return inputs;
     inputs.reserve(root->Platforms.size());
+
+    // ===== [JAMMER] START - Active jammer sources with geometry =====
+    // Built once per scan. Used for self-screen + neighbour (same-azimuth) noise.
+    // REQ-AESA-060.
+    const aesa::RadarConfig radarCfg = radarCore_.getConfig();
+
+    struct ActiveJammer {
+        std::string            platformId;
+        const ESMJammerConfig* cfg = nullptr;
+        double                 azDeg   = 0.0;  // from radar, same frame as TargetInput
+        double                 range_m = 0.0;  // jammer platform range from radar
+    };
+    std::vector<ActiveJammer> activeJammers;
+
+    // for (auto& [sid, s] : root->Sensors)
+    // {
+    //     if (!s || !s->Active || !s->parentEntity || !s->parentEntity->Active) continue;
+    //     if (s->subType != Sensor::SubType::ESM) continue;
+    //     const ESM* esm = dynamic_cast<const ESM*>(s);
+    //     if (!esm) continue;
+
+    //     const ESMJammerConfig& j = esm->jammerConfig();
+    //     if (!j.enabled || !jammerCoversRadar(j, radarCfg)) continue;
+
+    //     Platform* jp = s->parentEntity;
+    //     const QVector3D jpos = jp->transform.matrix.translation();
+
+    //     // Same axis map as TargetInput: model x=N, y=E, z=U (metres)
+    //     const double jx = (static_cast<double>(jpos.z()) - static_cast<double>(ownPosKm.z())) * COORD_SCALE;
+    //     const double jy = (static_cast<double>(jpos.x()) - static_cast<double>(ownPosKm.x())) * COORD_SCALE;
+    //     const double jz = (static_cast<double>(jpos.y()) - static_cast<double>(ownPosKm.y())) * COORD_SCALE;
+    //     const double jRange = std::sqrt(jx * jx + jy * jy + jz * jz);
+
+    //     if (!(jRange > 0.0) || jRange > j.jamRangeKm * 1000.0)
+    //         continue;  // radar outside this jammer's range
+
+    //     ActiveJammer aj;
+    //     aj.platformId = jp->ID;
+    //     aj.cfg        = &j;
+    //     aj.range_m    = jRange;
+    //     aj.azDeg      = std::atan2(jy, jx) * (180.0 / M_PI);
+    //     activeJammers.push_back(aj);
+    // }
+
+
+
+    for (auto& [sid, s] : root->Sensors)
+    {
+        if (!s || !s->Active || !s->parentEntity || !s->parentEntity->Active) continue;
+        if (s->subType != Sensor::SubType::ESM) continue;
+        const ESM* esm = dynamic_cast<const ESM*>(s);
+        if (!esm) continue;
+
+        const ESMJammerConfig& j = esm->jammerConfig();
+        if (!j.enabled || !jammerCoversRadar(j, radarCfg)) continue;
+
+        auto jpit = root->Platforms.find(s->parentEntity->ID);
+        if (jpit == root->Platforms.end() || !jpit->second) continue;
+        Platform* jp = jpit->second;
+
+        const QVector3D jpos = jp->transform.matrix.translation();
+
+        const double jx = (static_cast<double>(jpos.z()) - static_cast<double>(ownPosKm.z())) * COORD_SCALE;
+        const double jy = (static_cast<double>(jpos.x()) - static_cast<double>(ownPosKm.x())) * COORD_SCALE;
+        const double jz = (static_cast<double>(jpos.y()) - static_cast<double>(ownPosKm.y())) * COORD_SCALE;
+        const double jRange = std::sqrt(jx * jx + jy * jy + jz * jz);
+
+        if (!(jRange > 0.0) || jRange > j.jamRangeKm * 1000.0)
+            continue;
+
+        ActiveJammer aj;
+        aj.platformId = jp->ID;
+        aj.cfg        = &j;
+        aj.range_m    = jRange;
+        aj.azDeg      = std::atan2(jy, jx) * (180.0 / M_PI);
+        activeJammers.push_back(aj);
+    }
+
+
+
+    // Angular half-gate: at least a few degrees so a tight formation is covered,
+    // otherwise half of the radar beamwidth.
+    const double halfGateDeg = std::max(20.0, static_cast<double>(radarCfg.beamWidth) * 0.5);
+    // ===== [JAMMER] END =====
 
     for (auto& [key, entity] : root->Platforms)
     {
@@ -708,9 +933,7 @@ std::vector<aesa::TargetInput> AESARadar::collectTargets(
 
         // ---- Position: relative to radar, stabilised frame ------------------
         // Engine world: x = East, y = Up, z = North (km).
-        // Model: x = North, y = East, z = Up (m). No rotation by own attitude;
-        // the model converts to body angles where the antenna needs them.
-        // REQ-AESA-004.
+        // Model: x = North, y = East, z = Up (m).
         t.x = (static_cast<double>(wpos.z()) - static_cast<double>(ownPosKm.z())) * COORD_SCALE;
         t.y = (static_cast<double>(wpos.x()) - static_cast<double>(ownPosKm.x())) * COORD_SCALE;
         t.z = (static_cast<double>(wpos.y()) - static_cast<double>(ownPosKm.y())) * COORD_SCALE;
@@ -718,15 +941,13 @@ std::vector<aesa::TargetInput> AESARadar::collectTargets(
         t.id = platformToRadarID(key);
         outIdMap[t.id] = platform;
 
-        // ---- Velocity: absolute, stabilised frame (m/s) ---------------------
-        // Measured from position change over simulation time; valid for
-        // every entity type. REQ-AESA-004.
+        // ---- Velocity -------------------------------------------------------
         const std::array<double, 3> vW = updateVelocityEstimate(t.id, wpos, velDt);
         t.vx = vW[2];   // North = world z
         t.vy = vW[0];   // East  = world x
         t.vz = vW[1];   // Up    = world y
 
-        // ---- Physical dimensions (unchanged) --------------------------------
+        // ---- Physical dimensions --------------------------------------------
         t.dimensions.length   = static_cast<double>(platform->collider.getDimension().Length);
         t.dimensions.height   = static_cast<double>(platform->collider.getDimension().Height);
         t.dimensions.width    = static_cast<double>(platform->collider.getDimension().Width);
@@ -734,18 +955,67 @@ std::vector<aesa::TargetInput> AESARadar::collectTargets(
         t.dimensions.material = aesa::TargetMaterialType::METAL;
         t.dimensions.shape    = aesa::TargetShapeType::GENERIC;
 
-        // ---- Target descriptor defaults (unchanged) -------------------------
+        // ---- Target descriptor defaults -------------------------------------
         t.rcs          = 1.0;
         t.rcsTable     = {};
         t.platformType = "GENERIC";
         t.swerlingCase = aesa::SwerlingCase::CASE_I;
         t.surface      = aesa::SurfaceType::AIR;
-        t.jammer.active = false;
+
+        // ===== [JAMMER] START - Self-screen + same-azimuth neighbours =====
+        // 1) Platform that owns the jammer → full self-screening noise.
+        // 2) Other platforms within halfGateDeg of a jammer's azimuth →
+        //    stand-off noise at the JAMMER's range (not the target's range).
+        // REQ-AESA-060.
+        if (!activeJammers.empty())
+        {
+            const double tgtAz = std::atan2(t.y, t.x) * (180.0 / M_PI);
+
+            const ActiveJammer* best   = nullptr;
+            double              bestDaz = 1e9;
+            bool                isSelf  = false;
+
+            for (const ActiveJammer& aj : activeJammers)
+            {
+                if (aj.platformId == key)
+                {
+                    best   = &aj;
+                    isSelf = true;
+                    break;  // own jammer always wins
+                }
+
+                const double daz = std::fabs(std::remainder(tgtAz - aj.azDeg, 360.0));
+                if (daz <= halfGateDeg && daz < bestDaz)
+                {
+                    bestDaz = daz;
+                    best    = &aj;
+                    isSelf  = false;
+                }
+            }
+
+            if (best)
+            {
+                aesa::JammerConfig jc = toAesaJammer(*best->cfg, best->range_m, isSelf);
+
+                if (!isSelf)
+                {
+                    // Taper power toward the edge of the gate (optional realism).
+                    const double taper = 1.0 - (bestDaz / halfGateDeg);
+                    jc.power_kW *= std::max(0.25, taper);
+                }
+
+                t.jammer = jc;
+            }
+        }
+        // ===== [JAMMER] END =====
 
         inputs.push_back(t);
     }
     return inputs;
 }
+
+
+
 
 // =============================================================================
 // FUNCTION:    AESARadar::updateVelocityEstimate
@@ -776,9 +1046,9 @@ std::array<double, 3> AESARadar::updateVelocityEstimate(
     {
         // Finite difference in double; engine km -> m.
         const double raw[3] = {
-            (static_cast<double>(posKm.x()) - static_cast<double>(s.prevPosKm.x())) * COORD_SCALE / velDt,
-            (static_cast<double>(posKm.y()) - static_cast<double>(s.prevPosKm.y())) * COORD_SCALE / velDt,
-            (static_cast<double>(posKm.z()) - static_cast<double>(s.prevPosKm.z())) * COORD_SCALE / velDt };
+                               (static_cast<double>(posKm.x()) - static_cast<double>(s.prevPosKm.x())) * COORD_SCALE / velDt,
+                               (static_cast<double>(posKm.y()) - static_cast<double>(s.prevPosKm.y())) * COORD_SCALE / velDt,
+                               (static_cast<double>(posKm.z()) - static_cast<double>(s.prevPosKm.z())) * COORD_SCALE / velDt };
 
         if (s.samples == 1)
         {
@@ -1063,8 +1333,8 @@ void AESARadar::scan()
         const QVector3D r = source.right();
         const QVector3D u = source.up();
         const double R[3][3] = { { f.z(), f.x(), f.y() },
-                                 { r.z(), r.x(), r.y() },
-                                 { u.z(), u.x(), u.y() } };
+                                { r.z(), r.x(), r.y() },
+                                { u.z(), u.x(), u.y() } };
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j) pose.bodyFromStab[i][j] = R[i][j];
 
@@ -1089,8 +1359,8 @@ void AESARadar::scan()
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
                 A[i][j] = M[i][0] * pose.bodyFromStab[0][j]
-                        + M[i][1] * pose.bodyFromStab[1][j]
-                        + M[i][2] * pose.bodyFromStab[2][j];
+                          + M[i][1] * pose.bodyFromStab[1][j]
+                          + M[i][2] * pose.bodyFromStab[2][j];
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j) pose.bodyFromStab[i][j] = A[i][j];
     }
@@ -1138,21 +1408,21 @@ void AESARadar::scan()
     {
         radarInputs.erase(
             std::remove_if(radarInputs.begin(), radarInputs.end(),
-                [&stageCtx](const aesa::TargetInput& t)
-                {
-                    const double r = std::sqrt(t.x * t.x + t.y * t.y + t.z * t.z);
-                    const aesaplugin::TargetGeometry g = stageGeometry(stageCtx, t, r);
-                    for (const auto& keepFn : stageCtx.hooks->preFilters)
-                    {
-                        bool keep = true;
-                        {
-                            AesaLogicRegistry::StageGuard guard;
-                            try { keep = keepFn(stageCtx.radar, g); } catch (...) { keep = true; }
-                        }
-                        if (!keep) return true;   // remove
-                    }
-                    return false;
-                }),
+                           [&stageCtx](const aesa::TargetInput& t)
+                           {
+                               const double r = std::sqrt(t.x * t.x + t.y * t.y + t.z * t.z);
+                               const aesaplugin::TargetGeometry g = stageGeometry(stageCtx, t, r);
+                               for (const auto& keepFn : stageCtx.hooks->preFilters)
+                               {
+                                   bool keep = true;
+                                   {
+                                       AesaLogicRegistry::StageGuard guard;
+                                       try { keep = keepFn(stageCtx.radar, g); } catch (...) { keep = true; }
+                                   }
+                                   if (!keep) return true;   // remove
+                               }
+                               return false;
+                           }),
             radarInputs.end());
     }
 
@@ -1178,16 +1448,16 @@ void AESARadar::scan()
     aesa::RadarConfig cfg    = radarCore_.getConfig();
 #ifdef AESA_REGRESSION_TEST
     qInfo().noquote() << QString("TICK %1 mode=%2 dets=%3 trks=%4 dr=%5")
-        .arg(simTime_, 0, 'f', 6).arg(int(output.mode))
-        .arg(output.detections.size()).arg(output.tracks.size())
-        .arg(output.displayRange_km, 0, 'g', 17);
+                             .arg(simTime_, 0, 'f', 6).arg(int(output.mode))
+                             .arg(output.detections.size()).arg(output.tracks.size())
+                             .arg(output.displayRange_km, 0, 'g', 17);
     for (const auto& d : output.detections)
         qInfo().noquote() << QString("  D %1 %2 %3 %4 %5").arg(d.targetID)
-            .arg(d.range, 0, 'g', 17).arg(d.azimuth, 0, 'g', 17)
-            .arg(d.elevation, 0, 'g', 17).arg(d.snr, 0, 'g', 17);
+                                 .arg(d.range, 0, 'g', 17).arg(d.azimuth, 0, 'g', 17)
+                                 .arg(d.elevation, 0, 'g', 17).arg(d.snr, 0, 'g', 17);
     for (const auto& t : output.tracks)
         qInfo().noquote() << QString("  T %1 %2 %3 %4").arg(t.id)
-            .arg(t.x, 0, 'g', 17).arg(t.y, 0, 'g', 17).arg(t.z, 0, 'g', 17);
+                                 .arg(t.x, 0, 'g', 17).arg(t.y, 0, 'g', 17).arg(t.z, 0, 'g', 17);
 #endif
 
     // -------------------------------------------------------------------------

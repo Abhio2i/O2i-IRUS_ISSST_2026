@@ -104,6 +104,7 @@
         <file>images/networkicon.png</file>
         <file>images/mapediting.png</file>
         <file>images/selection.png</file>
+        <file>images/statistics.png</file>
     </qresource>
     <qresource prefix="/texture">
         <file>images/Texture/bball.png</file>
@@ -131,7 +132,7 @@
         <file>images/Texture/blast.png</file>
         <file>images/Texture/missile.png</file>
         <file>images/Texture/bomb.png</file>
-                <file>images/Texture/DIS_PIC/fighter_jet.png</file>
+        <file>images/Texture/DIS_PIC/fighter_jet.png</file>
         <file>images/Texture/DIS_PIC/helicopter.png</file>
         <file>images/Texture/DIS_PIC/uav.png</file>
         <file>images/Texture/DIS_PIC/tank.png</file>
@@ -160,6 +161,13 @@
         <file>Model/Airplane/11803_Airplane_wing_big_R_diff.jpg</file>
         <file>Model/Airplane/11803_Airplane_wing_details_L_diff.jpg</file>
         <file>Model/Airplane/11803_Airplane_wing_details_R_diff.jpg</file>
+        <file>Model/Airplane/ins-visakhapatnam.obj</file>
+        <file>Model/Airplane/ins-visakhapatnam.jpg</file>
+        <file>Model/Airplane/F-15_Eagle.obj</file>
+        <file>Model/Airplane/tankk.obj</file>
+        <file>Model/Airplane/texture_pbr_20250901.jpg</file>
+        <file>Model/Airplane/grass_ground_diff_4k.jpg</file>
+        <file>Model/Airplane/F_15H.jpg</file>
     </qresource>
     <qresource prefix="/new/prefix1"/>
     <qresource prefix="/DB">
@@ -321,6 +329,244 @@
         <file>images/air/merlin-hm2.png</file>
         <file>images/air/Fa-18.png</file>
         <file>images/air/P-8.png</file>
+        <file>images/air/Hero loitering-munition family.png</file>
+        <file>images/air/SkyStriker.png</file>
+        <file>images/air/Orbiter 4.png</file>
+        <file>images/air/Orbiter 3.png</file>
+        <file>images/air/Skylark II.png</file>
+        <file>images/air/Skylark I.png</file>
+        <file>images/air/Heron TP Eitan.png</file>
+        <file>images/air/Heron.png</file>
+        <file>images/air/Hermes 900.png</file>
+        <file>images/air/F-35I Adir.png</file>
+        <file>images/air/F-15I Raam.png</file>
+        <file>images/air/F-15C_D Eagle.png</file>
+        <file>images/air/F-16I Sufa.png</file>
+        <file>images/air/F-16 Fighting Falcon.png</file>
+        <file>images/air/F-16A_B Netz.png</file>
+        <file>images/air/C-130J-30 Super Hercules.png</file>
+        <file>images/air/C-130 Hercules.png</file>
+        <file>images/air/Boeing 707.png</file>
+        <file>images/air/Gulfstream G550.png</file>
+        <file>images/air/G550 Shavit.png</file>
+        <file>images/air/G550 Eitam.png</file>
+        <file>images/air/King Air 200.png</file>
+        <file>images/air/AH-64D Apache.png</file>
+        <file>images/air/AH-64E Apache Guardian.png</file>
+        <file>images/air/UH-60A L Yanshuf.png</file>
+        <file>images/air/CH-53D Yasur.png</file>
+        <file>images/air/Bell 206 Saifan.png</file>
+        <file>images/air/Hermes 450.png</file>
+        <file>images/air/Collaborative combat.png</file>
+        <file>images/air/Feiyi uav.png</file>
+        <file>images/air/Jiutian.png</file>
+        <file>images/air/GJ-11 Sharp Sword..png</file>
+        <file>images/air/Wing Loong.png</file>
+        <file>images/air/GJ-1.png</file>
+        <file>images/air/ASN-209.png</file>
+        <file>images/air/BZK-005.png</file>
+        <file>images/air/WZ-8.png</file>
+        <file>images/air/Z-20J.png</file>
+        <file>images/air/Z-20F.png</file>
+        <file>images/air/Z-18F.png</file>
+        <file>images/air/Z-9c.png</file>
+        <file>images/air/Mi-171.png</file>
+        <file>images/air/Z-20.png</file>
+        <file>images/air/Z-18.png</file>
+        <file>images/air/Z-11.png</file>
+        <file>images/air/Z-9.png</file>
+        <file>images/air/Z-8L.png</file>
+        <file>images/air/Z-8.png</file>
+        <file>images/air/Z-19.png</file>
+        <file>images/air/Z-10.png</file>
+        <file>images/air/J-10.png</file>
+        <file>images/air/J-7.png</file>
+        <file>images/air/JL-10.png</file>
+        <file>images/air/JL-9.png</file>
+        <file>images/air/JL-8.png</file>
+        <file>images/air/J-15D.png</file>
+        <file>images/air/J-16D.png</file>
+        <file>images/air/Y-9DZ.png</file>
+        <file>images/air/Y-9LG.png</file>
+        <file>images/air/Y-8G.png</file>
+        <file>images/air/Kj-700.png</file>
+        <file>images/air/Kj-600.png</file>
+        <file>images/air/HY-6.png</file>
+        <file>images/air/Y-30.png</file>
+        <file>images/air/Y-5.png</file>
+        <file>images/air/Y-7.png</file>
+        <file>images/air/Y-8.png</file>
+        <file>images/air/Y-9.png</file>
+        <file>images/air/Y-20B.png</file>
+        <file>images/air/Y-20 Kunpeng.png</file>
+        <file>images/air/Xian H-20.png</file>
+        <file>images/air/Xian H-6U.png</file>
+        <file>images/air/Xian H-6M.png</file>
+        <file>images/air/Xian H-6N.png</file>
+        <file>images/air/Xian H-6j.png</file>
+        <file>images/air/Xian H-6K.png</file>
+        <file>images/air/Shenyang j-50.png</file>
+        <file>images/air/Chengdu j-36.png</file>
+        <file>images/air/Shenyang J-6.png</file>
+        <file>images/air/Chengdu J-7.png</file>
+        <file>images/air/Shenyang J-8II.png</file>
+        <file>images/air/Shenyang J-15.png</file>
+        <file>images/air/Shenyang j-11B.png</file>
+        <file>images/air/Chengdu J-10B.png</file>
+        <file>images/air/Chengdu J-10C.png</file>
+        <file>images/air/Shenyang FC-31.png</file>
+        <file>images/air/Shenyang J-35A.png</file>
+        <file>images/air/XQ-58A Valkyrie.png</file>
+        <file>images/air/Switchblade 600.png</file>
+        <file>images/air/Switchblade 300.png</file>
+        <file>images/air/ScanEagle.png</file>
+        <file>images/air/RQ-21 Blackjack.png</file>
+        <file>images/air/MQ-4C Triton.png</file>
+        <file>images/air/RQ-170 Sentinel.png</file>
+        <file>images/air/RQ-4 Global Hawk.png</file>
+        <file>images/air/MQ-1C Gray Eagle.png</file>
+        <file>images/air/MQ-9 Reaper.png</file>
+        <file>images/air/V-22 Osprey.png</file>
+        <file>images/air/MH-6 Little Bird.png</file>
+        <file>images/air/MH-47G Chinook.png</file>
+        <file>images/air/MH-60S Sewhawk.png</file>
+        <file>images/air/AH-1Z Viper.png</file>
+        <file>images/air/UH-1Y Venom.png</file>
+        <file>images/air/CH-53K King Stallion.png</file>
+        <file>images/air/CH-53E Super Stallion.png</file>
+        <file>images/air/HH-60W Jolly Green II.png</file>
+        <file>images/air/UH-60M Black Hawk.png</file>
+        <file>images/air/AH-64E Apache.png</file>
+        <file>images/air/AC-130J Ghostrider.png</file>
+        <file>images/air/HC-130J Combat King II.png</file>
+        <file>images/air/P-8A Poseidon.png</file>
+        <file>images/air/U-2 Dragon Lady.png</file>
+        <file>images/air/E-6B Mercury.png</file>
+        <file>images/air/E-4B Nightwatch.png</file>
+        <file>images/air/E-2D Advanced Hawkeye.png</file>
+        <file>images/air/KC-130J Hercules.png</file>
+        <file>images/air/C-5M Super Galaxy.png</file>
+        <file>images/air/B-1B Lancer.png</file>
+        <file>images/air/B-52H Stratofortress.png</file>
+        <file>images/air/AV-8B Harrier II.png</file>
+        <file>images/air/A-10C Thunderbolt II.png</file>
+        <file>images/air/EA-18G Growler.png</file>
+        <file>images/air/FA-18E Super Hornet.png</file>
+        <file>images/air/F-15E Strike Eagle.png</file>
+        <file>images/air/F-15EX Eagle II.png</file>
+        <file>images/air/F-35A Lightning II.png</file>
+        <file>images/air/RC-135 Rivet joint.png</file>
+        <file>images/air/KC-46 Pegasus.png</file>
+        <file>images/air/Supercam S350.png</file>
+        <file>images/air/KUB-BLA.png</file>
+        <file>images/air/Geran-3.png</file>
+        <file>images/air/Geran-2.png</file>
+        <file>images/air/Eleron-3.png</file>
+        <file>images/air/ZALA Orlan series.png</file>
+        <file>images/air/ZALA Lancet.png</file>
+        <file>images/air/Orlan-30.png</file>
+        <file>images/air/Orlan-10.png</file>
+        <file>images/air/Forpost-R.png</file>
+        <file>images/air/Inokhodets.png</file>
+        <file>images/air/Ansat.png</file>
+        <file>images/air/Ka-27.png</file>
+        <file>images/air/Ka-29.png</file>
+        <file>images/air/Mi-17.png</file>
+        <file>images/air/Mi-8.png</file>
+        <file>images/air/Mi-35.png</file>
+        <file>images/air/Mi-24.png</file>
+        <file>images/air/Mi-28NM.png</file>
+        <file>images/air/Mi-28N.png</file>
+        <file>images/air/Mi-28N.Png</file>
+        <file>images/air/Tu-214R.png</file>
+        <file>images/air/Il-22.png</file>
+        <file>images/air/Il-20M.png</file>
+        <file>images/air/A-50U airborne.png</file>
+        <file>images/air/An-26.png</file>
+        <file>images/air/An-124 Ruslan.png</file>
+        <file>images/air/Il-78 tanker.png</file>
+        <file>images/air/Tu-22M3 Backfire.png</file>
+        <file>images/air/Tu-95MS Bear.png</file>
+        <file>images/air/Tu-160M Blackjack.png</file>
+        <file>images/air/Su-25 Frogfoot.png</file>
+        <file>images/air/MiG-29 Fulcrum.png</file>
+        <file>images/air/MiG-31 Foxhound.png</file>
+        <file>images/air/Su-27 Flanker.png</file>
+        <file>images/air/Su-34 Fullback.png</file>
+        <file>images/air/Su-30SM2.png</file>
+        <file>images/air/Su-30SM.png</file>
+        <file>images/air/Su-35S Flanker-E.png</file>
+        <file>images/air/Su-57 Felon.png</file>
+        <file>images/air/ALS-50.png</file>
+        <file>images/air/Switch.png</file>
+        <file>images/air/Netra.png</file>
+        <file>images/air/Harpy.png</file>
+        <file>images/air/Harop.png</file>
+        <file>images/air/Searcher Mk II.png</file>
+        <file>images/air/Heron TP.png</file>
+        <file>images/air/DRDO Archer.png</file>
+        <file>images/air/MH-60R Seahawk.png</file>
+        <file>images/air/Cheetah.png</file>
+        <file>images/air/Chetak .png</file>
+        <file>images/air/CH-47F Chinook.png</file>
+        <file>images/air/HAL Light Utility.png</file>
+        <file>images/air/Embraer ERJ-145 AEW&amp;C.png</file>
+        <file>images/air/Boeing 737.png</file>
+        <file>images/air/Dornier Do-228.png</file>
+        <file>images/air/Tejas MK1A.png</file>
+        <file>images/air/Tejas Mk1.png</file>
+        <file>images/air/Z-9EC .png</file>
+        <file>images/air/P-3C Orion.png</file>
+        <file>images/air/ATR-72 maritime patrol.png</file>
+        <file>images/air/Burraq.png</file>
+        <file>images/air/Shahpar-ii.png</file>
+        <file>images/air/CH-4.png</file>
+        <file>images/air/Wing Loong ii.png</file>
+        <file>images/air/Bayraktar Akinci.png</file>
+        <file>images/air/Bayraktar TB2.png</file>
+        <file>images/air/Sa 330 puma.png</file>
+        <file>images/air/Alouette III.png</file>
+        <file>images/air/Bell 412.png</file>
+        <file>images/air/ZDK-03 Karakoram Eagle.png</file>
+        <file>images/air/Saab 2000 Erieye.png</file>
+        <file>images/air/Y-12.png</file>
+        <file>images/air/Airbus A310.png</file>
+        <file>images/air/IL-78MP.png</file>
+        <file>images/air/MFI-17 Mushshak.png</file>
+        <file>images/air/FT-7.png</file>
+        <file>images/air/T-37 Tweet.png</file>
+        <file>images/air/Super Mushshak.png</file>
+        <file>images/air/K-8 karakorum.png</file>
+        <file>images/air/F-7PG.png</file>
+        <file>images/air/J-10CE.png</file>
+        <file>images/air/Nagastra 1.png</file>
+        <file>images/air/Sea_Hawk.png</file>
+        <file>images/air/Vampire_FB.52.png</file>
+        <file>images/air/T-33A_RT-33.png</file>
+        <file>images/air/Su-24MK_Fencer.png</file>
+        <file>images/air/Sea_Hawk2-.png</file>
+        <file>images/air/jpeg-optimizer_Sea_Hawk.png</file>
+        <file>images/air/RQ-4_Global_Hawk.png</file>
+        <file>images/air/Mystere_IVA_MD.png</file>
+        <file>images/air/Mig-19.png</file>
+        <file>images/air/Mi-8_Helicopter.png</file>
+        <file>images/air/Mi-4.png</file>
+        <file>images/air/KC-46A_Pegasus.png</file>
+        <file>images/air/Gnat_MK-1.png</file>
+        <file>images/air/F_Tiger_II.png</file>
+        <file>images/air/F-104A_Starfighter.png</file>
+        <file>images/air/F-86E Sabre.png</file>
+        <file>images/air/F-4E_Phantom_II.png</file>
+        <file>images/air/DHC-4_Caribou.png</file>
+        <file>images/air/C-130B_E_Hercules.png</file>
+        <file>images/air/C-47_Dhaka_Aircraft.png</file>
+        <file>images/air/Breguet_Alizé.png</file>
+        <file>images/air/Boeing_747_Tanker.png</file>
+        <file>images/air/Boeing_707_Tanker.png</file>
+        <file>images/air/B-57BC_Aircraft.png</file>
+        <file>images/air/B-2-Spirit-Stealth-Military-Bomber-9951.png</file>
+        <file>images/air/AN-12.png</file>
+        <file>images/air/Alouette_III.png</file>
     </qresource>
     <qresource prefix="/ground">
         <file>images/ground/Adobe_Express.png</file>
@@ -441,6 +687,247 @@
         <file>images/ground/Polonez.png</file>
         <file>images/ground/BTR-82k.png</file>
         <file>images/ground/BTR-80.png</file>
+        <file>images/ground/Predator Hawk.png</file>
+        <file>images/ground/Merkava Mk 4.png</file>
+        <file>images/ground/Merkava Mk 3.png</file>
+        <file>images/ground/Merkava Mk 4M.png</file>
+        <file>images/ground/Merkava Mk 2.png</file>
+        <file>images/ground/Merkava Mk 5.png</file>
+        <file>images/ground/Namer heavy.png</file>
+        <file>images/ground/Eitan.png</file>
+        <file>images/ground/Achzarit heavy.png</file>
+        <file>images/ground/Nagmachon APC.png</file>
+        <file>images/ground/Puma Combat.png</file>
+        <file>images/ground/M113 Zelda.png</file>
+        <file>images/ground/M113-based.png</file>
+        <file>images/ground/M109 Doher.png</file>
+        <file>images/ground/ATMOS 2000.png</file>
+        <file>images/ground/Roem 155.png</file>
+        <file>images/ground/Cardom 120 mm.png</file>
+        <file>images/ground/Keshet 120mm.png</file>
+        <file>images/ground/PULS (Precise and Universal Launching System).png</file>
+        <file>images/ground/LAR-160.png</file>
+        <file>images/ground/ZBD-86 legacy infantry fighting vehicle.png</file>
+        <file>images/ground/Type 19 wheeled infantry fighting vehicle.png</file>
+        <file>images/ground/ZBL-09 wheeled armoured vehicle.png</file>
+        <file>images/ground/ZBL-08 wheeled infantry fighting vehicle.png</file>
+        <file>images/ground/ZBD-05 amphibious infantry fighting vehicle.png</file>
+        <file>images/ground/ZBD-04A.png</file>
+        <file>images/ground/ZBD-04.png</file>
+        <file>images/ground/BD-03 airborne infantry fighting vehicle.png</file>
+        <file>images/ground/WZ-551 family.png</file>
+        <file>images/ground/VN-series armoured vehicles.png</file>
+        <file>images/ground/VP-10.png</file>
+        <file>images/ground/ZBL-09.png</file>
+        <file>images/ground/ZSL-10.png</file>
+        <file>images/ground/ZSL-92.png</file>
+        <file>images/ground/ZSD-89.png</file>
+        <file>images/ground/ZSD-05 Amphibious Vehicle.png</file>
+        <file>images/ground/ZTQ-15 lightweight  Tank.png</file>
+        <file>images/ground/ZTL-11 Armoured Gun.png</file>
+        <file>images/ground/ZBL-08 reconnaissance variants.png</file>
+        <file>images/ground/ZBD-04A Reconnaissance Vehicle.png</file>
+        <file>images/ground/ZBD-03 airborne combat vehicle.png</file>
+        <file>images/ground/Type 100 Tank.png</file>
+        <file>images/ground/Type 100 New-generation armoured vehicle programme.png</file>
+        <file>images/ground/Type 99 Main battle tank.png</file>
+        <file>images/ground/Type 96A Main battle tank.png</file>
+        <file>images/ground/Type 59 Legacy main battle tank.png</file>
+        <file>images/ground/Type 15  Lightweight tank.png</file>
+        <file>images/ground/Type 99A Modern main battle tank.png</file>
+        <file>images/ground/Type 96 Main battle tank.png</file>
+        <file>images/ground/Type 96B Main battle tank.png</file>
+        <file>images/ground/Type 79 Tank battle tank.png</file>
+        <file>images/ground/Type 69 Legacy main battle tank.png</file>
+        <file>images/ground/PLZ-45 155 mm self-propelled howitzer.png</file>
+        <file>images/ground/PLL-09 122 mm wheeled artillery system.png</file>
+        <file>images/ground/PCL-161 122 mm wheeled howitzer.png</file>
+        <file>images/ground/PCL-171 122.png</file>
+        <file>images/ground/PLZ-07 122 mm self-propelled howitzer.png</file>
+        <file>images/ground/PCL-181 155 mm wheeled howitzer.png</file>
+        <file>images/ground/PLZ-05 155 mm self-propelled howitzer.png</file>
+        <file>images/ground/WS-3.png</file>
+        <file>images/ground/WS-2.png</file>
+        <file>images/ground/Type 90B.png</file>
+        <file>images/ground/SR-5.png</file>
+        <file>images/ground/PHZ-89.png</file>
+        <file>images/ground/PHL-16.png</file>
+        <file>images/ground/PHL-11.png</file>
+        <file>images/ground/PHL-03.png</file>
+        <file>images/ground/PCH-191.png</file>
+        <file>images/ground/AR-3.png</file>
+        <file>images/ground/Technical HQ-9C Launcher Blueprint-Photoroom.png</file>
+        <file>images/ground/HQ-22A.png</file>
+        <file>images/ground/HQ-22.png</file>
+        <file>images/ground/HQ-17AE.png</file>
+        <file>images/ground/HQ-17A.png</file>
+        <file>images/ground/HQ-17.png</file>
+        <file>images/ground/HQ-16.png</file>
+        <file>images/ground/HQ-9.png</file>
+        <file>images/ground/HQ-7.png</file>
+        <file>images/ground/HQ-6D.png</file>
+        <file>images/ground/HQ-9B-.png</file>
+        <file>images/ground/HQ-16B.png</file>
+        <file>images/ground/HQ-19 anti-ballistic.png</file>
+        <file>images/ground/Palletized Load system .png</file>
+        <file>images/ground/M60 AVLB.png</file>
+        <file>images/ground/M9 armored.png</file>
+        <file>images/ground/M1150 Assault.png</file>
+        <file>images/ground/M88A2 Hercules.png</file>
+        <file>images/ground/HET.png</file>
+        <file>images/ground/PLS truck.png</file>
+        <file>images/ground/HEMTT.png</file>
+        <file>images/ground/IFPC (Indirect Fire Protection Capability).png</file>
+        <file>images/ground/M-SHORAD.png</file>
+        <file>images/ground/NASAMS.png</file>
+        <file>images/ground/THAAD.png</file>
+        <file>images/ground/MIM-104 Patriot.png</file>
+        <file>images/ground/M58 MICLIC mine-clearing system.png</file>
+        <file>images/ground/M270A2 MLRS.png</file>
+        <file>images/ground/M119 105 mm howitzer.png</file>
+        <file>images/ground/M1299 ERCA.png</file>
+        <file>images/ground/M1064 mortar carrier.png</file>
+        <file>images/ground/M120 mortar system.png</file>
+        <file>images/ground/M1128 Stryker MGS.png</file>
+        <file>images/ground/JLTV.png</file>
+        <file>images/ground/M109A7 Paladin.png</file>
+        <file>images/ground/M109A6 paladin.png</file>
+        <file>images/ground/Oshkosh M-ATV.png</file>
+        <file>images/ground/Cougar MRAP.png</file>
+        <file>images/ground/M1117 Guardian.png</file>
+        <file>images/ground/Humvee.png</file>
+        <file>images/ground/AMPV.png</file>
+        <file>images/ground/LAV-25.png</file>
+        <file>images/ground/Stryker Dragoon.png</file>
+        <file>images/ground/Stryker ICV.png</file>
+        <file>images/ground/M10 Booker.png</file>
+        <file>images/ground/M1E3 Abrams.png</file>
+        <file>images/ground/M1A2 SEPv3 Abrams.png</file>
+        <file>images/ground/M1A1 Abrams.png</file>
+        <file>images/ground/M1A2 Abrams.png</file>
+        <file>images/ground/Rubezh.png</file>
+        <file>images/ground/Bal.png</file>
+        <file>images/ground/Bastion-P.png</file>
+        <file>images/ground/BREM-1.png</file>
+        <file>images/ground/IMR-3.png</file>
+        <file>images/ground/TMM-6.png</file>
+        <file>images/ground/Typhoon-U.png</file>
+        <file>images/ground/Typhoon-K.png</file>
+        <file>images/ground/BAZ.png</file>
+        <file>images/ground/Ural.png</file>
+        <file>images/ground/kamaz .png</file>
+        <file>images/ground/Podlet-k1 radar.png</file>
+        <file>images/ground/96L6 radar.png</file>
+        <file>images/ground/Nebo-M radar.png</file>
+        <file>images/ground/Repellent-1.png</file>
+        <file>images/ground/Pole-21.png</file>
+        <file>images/ground/Leer-3.png</file>
+        <file>images/ground/Moskva-1.png</file>
+        <file>images/ground/Murmansak BN.png</file>
+        <file>images/ground/krasukha-4.png</file>
+        <file>images/ground/HQ-9BE.png</file>
+        <file>images/ground/FM-90.png</file>
+        <file>images/ground/LY-80.png</file>
+        <file>images/ground/Fatah-I.png</file>
+        <file>images/ground/A-100.png</file>
+        <file>images/ground/Type 59-1.png</file>
+        <file>images/ground/KRL-122.png</file>
+        <file>images/ground/M114.png</file>
+        <file>images/ground/M198.png</file>
+        <file>images/ground/SH-15.png</file>
+        <file>images/ground/M109.png</file>
+        <file>images/ground/Dragoon.png</file>
+        <file>images/ground/VCC-1.png</file>
+        <file>images/ground/Viper.png</file>
+        <file>images/ground/talha.png</file>
+        <file>images/ground/M113.png</file>
+        <file>images/ground/S-500 Prometheus.png</file>
+        <file>images/ground/2K12 Kub.png</file>
+        <file>images/ground/Pantsir-S1.png</file>
+        <file>images/ground/Tor-M2.png</file>
+        <file>images/ground/Buk-M2.png</file>
+        <file>images/ground/S-350 Vityaz.png</file>
+        <file>images/ground/S-300V series.png</file>
+        <file>images/ground/S-300P.png</file>
+        <file>images/ground/BMD-4M.png</file>
+        <file>images/ground/Boomerang.png</file>
+        <file>images/ground/TOS-2 Tosochka.png</file>
+        <file>images/ground/TOS-1A Solntsepyok.png</file>
+        <file>images/ground/Tornado-S.png</file>
+        <file>images/ground/Tornado-G.png</file>
+        <file>images/ground/BM-27 Uragan.png</file>
+        <file>images/ground/2A36 Giatsint-B.png</file>
+        <file>images/ground/2A65 Msta-B.png</file>
+        <file>images/ground/2S12 Sani mortar system.png</file>
+        <file>images/ground/2S9 Nona-S.png</file>
+        <file>images/ground/2S31 Vena.png</file>
+        <file>images/ground/2S1 Gvozdika.png</file>
+        <file>images/ground/2S4 Tyulpan.png</file>
+        <file>images/ground/2S7M Malka.png</file>
+        <file>images/ground/2S3 Akatsiya.png</file>
+        <file>images/ground/2S35 Koalitsiya-SV.png</file>
+        <file>images/ground/2S19 Msta-S.png</file>
+        <file>images/ground/Kurganets-25.png</file>
+        <file>images/ground/BTR-MDM Rakushka.png</file>
+        <file>images/ground/BTR-82A.png</file>
+        <file>images/ground/BMD-2.png</file>
+        <file>images/ground/T-14 Armata.png</file>
+        <file>images/ground/T-62MV.png</file>
+        <file>images/ground/T-72B3M.png</file>
+        <file>images/ground/T-62M.png</file>
+        <file>images/ground/T-72B3.png</file>
+        <file>images/ground/T-80BVM.png</file>
+        <file>images/ground/T-90A.png</file>
+        <file>images/ground/T-90M Proryv.png</file>
+        <file>images/ground/Project Kusha.png</file>
+        <file>images/ground/L-70 anti aircraft gun.png</file>
+        <file>images/ground/ZSU-23-4 Shilka.png</file>
+        <file>images/ground/Tunguska.png</file>
+        <file>images/ground/Barak-8.png</file>
+        <file>images/ground/MRSAM.png</file>
+        <file>images/ground/M142 HIMARS.png</file>
+        <file>images/ground/Indian Field Gun.png</file>
+        <file>images/ground/D-30 howitzer.png</file>
+        <file>images/ground/M46 field .png</file>
+        <file>images/ground/M777 155 mm howitzer.png</file>
+        <file>images/ground/Light Specialist .png</file>
+        <file>images/ground/future infantry combat .png</file>
+        <file>images/ground/quick reaction fighting .png</file>
+        <file>images/ground/mahindra armado.png</file>
+        <file>images/ground/WhAP.png</file>
+        <file>images/ground/BMP-2K.png</file>
+        <file>images/ground/Zorawar.png</file>
+        <file>images/ground/Al-Zarrar.png</file>
+        <file>images/ground/Type 59.png</file>
+        <file>images/ground/Type 69.png</file>
+        <file>images/ground/Type 85-IIAP.png</file>
+        <file>images/ground/T-80UD.png</file>
+        <file>images/ground/VT-4 Haider.png</file>
+        <file>images/ground/Al-Khalid-I.png</file>
+        <file>images/ground/Al-Khalid.png</file>
+        <file>images/ground/BMP-2.png</file>
+        <file>images/ground/BMP-1.png</file>
+        <file>images/ground/BMP-3.png</file>
+        <file>images/ground/Iron fist APS.png</file>
+        <file>images/ground/RkhM-6.png</file>
+        <file>images/ground/Rafael Trophy APS.png</file>
+        <file>images/ground/Arrow 2.png</file>
+        <file>images/ground/Arrow 3.png</file>
+        <file>images/ground/Barak MX.png</file>
+        <file>images/ground/Caterpillar D9.png</file>
+        <file>images/ground/D9T.png</file>
+        <file>images/ground/Davids Sling.png</file>
+        <file>images/ground/Menatetz.png</file>
+        <file>images/ground/TMS-65U.png</file>
+        <file>images/ground/M88.png</file>
+        <file>images/ground/T-54 Tank.png</file>
+        <file>images/ground/T-34_Tank.png</file>
+        <file>images/ground/PT-76 Tank.png</file>
+        <file>images/ground/M-24_Chaffee.png</file>
+        <file>images/ground/M36B1_Jackson.png</file>
+        <file>images/ground/M3_Stuart.png</file>
+        <file>images/ground/Army_soldier.png</file>
+        <file>images/ground/AMX-13 Tank.png</file>
     </qresource>
     <qresource prefix="/sea">
         <file>images/sea/AUV.png</file>
@@ -558,6 +1045,501 @@
         <file>images/sea/Shondong.png</file>
         <file>images/sea/Astute.png</file>
         <file>images/sea/Type094_JIN.png</file>
+        <file>images/sea/Type 96 122 mm howitzer.png</file>
+        <file>images/sea/Type 89 120 mm mortar.png</file>
+        <file>images/sea/Type 86 122 mm howitzer.png</file>
+        <file>images/sea/Type 83 152 mm howitzer.png</file>
+        <file>images/sea/Type 66 152 mm-Photoroom.png</file>
+        <file>images/sea/Type 59-1 130 mm field gun.png</file>
+        <file>images/sea/Oceanographic research vessels.png</file>
+        <file>images/sea/Type 901 fast combat support ship.png</file>
+        <file>images/sea/Type 903A replenishment ship.png</file>
+        <file>images/sea/Type 904 supply ship.png</file>
+        <file>images/sea/Type 905 replenishment ship.png</file>
+        <file>images/sea/Type 927 ocean surveillance ship.png</file>
+        <file>images/sea/Type 815A intelligence collection ship.png</file>
+        <file>images/sea/Type 636A hydrographic survey ship.png</file>
+        <file>images/sea/Hospital ships.png</file>
+        <file>images/sea/Fleet tankers.png</file>
+        <file>images/sea/Salvage and rescue vessels.png</file>
+        <file>images/sea/Type 076 amphibious assault ship.png</file>
+        <file>images/sea/Type 075 amphibious assault ship.png</file>
+        <file>images/sea/Type 072A landing ship.png</file>
+        <file>images/sea/Type 072III landing ship.png</file>
+        <file>images/sea/Type 073 landing ship.png</file>
+        <file>images/sea/Type 074 landing ship.png</file>
+        <file>images/sea/Type 726 air-cushion landing craft.png</file>
+        <file>images/sea/Type 958 air-cushion landing craft.png</file>
+        <file>images/sea/Type 071 Yuzhao landing platform dock.png</file>
+        <file>images/sea/Type 052 Luhu class.png</file>
+        <file>images/sea/Type 093 Shang class.png</file>
+        <file>images/sea/Type 093B.png</file>
+        <file>images/sea/Type 093A.png</file>
+        <file>images/sea/Type 095.png</file>
+        <file>images/sea/Type 039A Yuan class.png</file>
+        <file>images/sea/Type 039 Song class.png</file>
+        <file>images/sea/Type 035 Ming class.png</file>
+        <file>images/sea/Kilo-class submarines acquired from Russia.png</file>
+        <file>images/sea/Type 032 Qing class.png</file>
+        <file>images/sea/Type 039B Yuan class.png</file>
+        <file>images/sea/Type 094 Jin class.png</file>
+        <file>images/sea/Type 096 Tang class.png</file>
+        <file>images/sea/Type 056A Jiangdao.png</file>
+        <file>images/sea/Ornate Bronze Measurement Plate.png</file>
+        <file>images/sea/Type 037 submarine chasers.png</file>
+        <file>images/sea/Type 053H3.png</file>
+        <file>images/sea/Type 053H2G.png</file>
+        <file>images/sea/Type 053H1.png</file>
+        <file>images/sea/Type 054.png</file>
+        <file>images/sea/Type 054B.png</file>
+        <file>images/sea/Type 054A.png</file>
+        <file>images/sea/Type 051C Luzhou class.png</file>
+        <file>images/sea/Type 051 Luda class.png</file>
+        <file>images/sea/Type 051B Luhai class.png</file>
+        <file>images/sea/Type 052B Luyang I class.png</file>
+        <file>images/sea/Type 052C Luyang II class.png</file>
+        <file>images/sea/Type 052D Luyang III class.png</file>
+        <file>images/sea/Type 055 Renhai class.png</file>
+        <file>images/sea/Liaoning (CV-16)  Aircraft carrier.png</file>
+        <file>images/sea/Fujian (CV-18).png</file>
+        <file>images/sea/Shandong (CV-17)  Aircraft carrier.png</file>
+        <file>images/sea/harpers ferry-class.png</file>
+        <file>images/sea/Whidbey Island-class.png</file>
+        <file>images/sea/America-class.png</file>
+        <file>images/sea/Freedom-class.png</file>
+        <file>images/sea/Independence-class.png</file>
+        <file>images/sea/Belgorod special-purpose.png</file>
+        <file>images/sea/Kilo-class diesel.png</file>
+        <file>images/sea/Sierra-class.png</file>
+        <file>images/sea/Akula-class.png</file>
+        <file>images/sea/Oscar II-class .png</file>
+        <file>images/sea/Yasen.png</file>
+        <file>images/sea/Delta IV-class.png</file>
+        <file>images/sea/Karakurt-class.png</file>
+        <file>images/sea/Admiral Grigorovich-class.png</file>
+        <file>images/sea/Admiral Gorshkov-class.png</file>
+        <file>images/sea/Sovremenny-class .png</file>
+        <file>images/sea/Udaloy-class.png</file>
+        <file>images/sea/Slava-class.png</file>
+        <file>images/sea/Admiral Kuznetsov.png</file>
+        <file>images/sea/Azmat class.png</file>
+        <file>images/sea/INS Agray.png</file>
+        <file>images/sea/INS Dunagiri.png</file>
+        <file>images/sea/INS Mahendragiri.png</file>
+        <file>images/sea/Shakti fleet.png</file>
+        <file>images/sea/Deepak class.png</file>
+        <file>images/sea/INS Sanshodhak.png</file>
+        <file>images/sea/INS Sandhayak.png</file>
+        <file>images/sea/INS Nistar.png</file>
+        <file>images/sea/INS Astradharani.png</file>
+        <file>images/sea/INS Anvesh.png</file>
+        <file>images/sea/Dhruv class.png</file>
+        <file>images/sea/LCU Mk IV.png</file>
+        <file>images/sea/Shishumar class.png</file>
+        <file>images/sea/Sindhughosh class.png</file>
+        <file>images/sea/S4.png</file>
+        <file>images/sea/Arighaat.png</file>
+        <file>images/sea/Abhay class.png</file>
+        <file>images/sea/Car Nicobar class.png</file>
+        <file>images/sea/Khukri class.png</file>
+        <file>images/sea/Teg class.png</file>
+        <file>images/sea/Nilgiri class.png</file>
+        <file>images/sea/Rajput class.png</file>
+        <file>images/sea/Agosta 70.png</file>
+        <file>images/sea/Hangor class.png</file>
+        <file>images/sea/Hashmat class.png</file>
+        <file>images/sea/Khalid class.png</file>
+        <file>images/sea/Agosta 90B.png</file>
+        <file>images/sea/Yarmook-class offshore patrol vessels.png</file>
+        <file>images/sea/Oliver Hazard Perry-class frigates.png</file>
+        <file>images/sea/Babur-class corvettes.png</file>
+        <file>images/sea/MILGEM.png</file>
+        <file>images/sea/Tughril-class frigates.png</file>
+        <file>images/sea/F-22P Zulfiquar-class.png</file>
+        <file>images/sea/Saar 5 Class.png</file>
+        <file>images/sea/INS Nahshon.png</file>
+        <file>images/sea/Shaldag class.png</file>
+        <file>images/sea/INS Komemiyut.png</file>
+        <file>images/sea/Super dvora MK II.png</file>
+        <file>images/sea/Dolphin II class.png</file>
+        <file>images/sea/Dabur class.png</file>
+        <file>images/sea/USS Truxtun.png</file>
+        <file>images/sea/USS Stout.png</file>
+        <file>images/sea/USS JASON.png</file>
+        <file>images/sea/USS Gettysburg.png</file>
+        <file>images/sea/USS Forrest Sherman.png</file>
+        <file>images/sea/USS Canberra.png</file>
+        <file>images/ground/T-54 Tank.png</file>
+        <file>images/ground/T-34_Tank.png</file>
+        <file>images/ground/PinakaMulti-BarrelRocketLauncher.png</file>
+        <file>images/ground/PT-76 Tank.png</file>
+        <file>images/ground/M-24_Chaffee.png</file>
+        <file>images/ground/M36B1_Jackson.png</file>
+        <file>images/ground/M3_Stuart.png</file>
+        <file>images/ground/Army_soldier.png</file>
+        <file>images/ground/AMX-13 Tank.png</file>
+        <file>images/ground/BMP-2.png</file>
+        <file>images/ground/BMP-1.png</file>
+        <file>images/ground/BMP-3.png</file>
+        <file>images/ground/BAZ.png</file>
+        <file>images/ground/BTR-82A.png</file>
+        <file>images/ground/Type 19 wheeled infantry fighting vehicle.png</file>
+        <file>images/ground/Cougar MRAP.png</file>
+        <file>images/ground/Typhoon-U.png</file>
+        <file>images/ground/2S9 Nona-S.png</file>
+        <file>images/ground/PCL-171 122.png</file>
+        <file>images/ground/Stryker ICV.png</file>
+        <file>images/ground/Nagmachon APC.png</file>
+        <file>images/ground/Technical HQ-9C Launcher Blueprint-Photoroom.png</file>
+        <file>images/ground/Merkava Mk 3.png</file>
+        <file>images/ground/ZBD-05 amphibious infantry fighting vehicle.png</file>
+        <file>images/ground/ATMOS 2000.png</file>
+        <file>images/ground/Ural.png</file>
+        <file>images/ground/Nebo-M radar.png</file>
+        <file>images/ground/THAAD.png</file>
+        <file>images/ground/Al-Khalid-I.png</file>
+        <file>images/ground/HET.png</file>
+        <file>images/ground/Type 96A Main battle tank.png</file>
+        <file>images/ground/VT-4 Haider.png</file>
+        <file>images/ground/T-72B3M.png</file>
+        <file>images/ground/IFPC (Indirect Fire Protection Capability).png</file>
+        <file>images/ground/T-72B3.png</file>
+        <file>images/ground/Kurganets-25.png</file>
+        <file>images/ground/BREM-1.png</file>
+        <file>images/ground/IMR-3.png</file>
+        <file>images/ground/Tunguska.png</file>
+        <file>images/ground/ZBD-03 airborne combat vehicle.png</file>
+        <file>images/ground/KRL-122.png</file>
+        <file>images/ground/Viper.png</file>
+        <file>images/ground/PHL-16.png</file>
+        <file>images/ground/mahindra armado.png</file>
+        <file>images/ground/2S31 Vena.png</file>
+        <file>images/ground/ZTQ-15 lightweight  Tank.png</file>
+        <file>images/ground/LAV-25.png</file>
+        <file>images/ground/ZBD-86 legacy infantry fighting vehicle.png</file>
+        <file>images/ground/TOS-1A Solntsepyok.png</file>
+        <file>images/ground/PLZ-05 155 mm self-propelled howitzer.png</file>
+        <file>images/ground/PCL-161 122 mm wheeled howitzer.png</file>
+        <file>images/ground/BMP-2K.png</file>
+        <file>images/ground/AR-3.png</file>
+        <file>images/ground/Type 90B.png</file>
+        <file>images/ground/Polonez.png</file>
+        <file>images/ground/Type 100 New-generation armoured vehicle programme.png</file>
+        <file>images/ground/Indian Field Gun.png</file>
+        <file>images/ground/ZBD-04A Reconnaissance Vehicle.png</file>
+        <file>images/ground/Humvee.png</file>
+        <file>images/ground/Merkava Mk 2.png</file>
+        <file>images/ground/Zorawar.png</file>
+        <file>images/ground/Type 99A Modern main battle tank.png</file>
+        <file>images/ground/T-14 Armata.png</file>
+        <file>images/ground/T-80BVM.png</file>
+        <file>images/ground/M88A2 Hercules.png</file>
+        <file>images/ground/A-100.png</file>
+        <file>images/ground/2S35 Koalitsiya-SV.png</file>
+        <file>images/ground/Merkava Mk 5.png</file>
+        <file>images/ground/Type 96B Main battle tank.png</file>
+        <file>images/ground/Merkava Mk 4.png</file>
+        <file>images/ground/HEMTT.png</file>
+        <file>images/ground/ZSU-23-4 Shilka.png</file>
+        <file>images/ground/S-500 Prometheus.png</file>
+        <file>images/ground/HQ-17AE.png</file>
+        <file>images/ground/Type 59 Legacy main battle tank.png</file>
+        <file>images/ground/2S12 Sani mortar system.png</file>
+        <file>images/ground/PLZ-07 122 mm self-propelled howitzer.png</file>
+        <file>images/ground/PHL-11.png</file>
+        <file>images/ground/M9 armored.png</file>
+        <file>images/ground/HQ-16B.png</file>
+        <file>images/ground/PLZ-45 155 mm self-propelled howitzer.png</file>
+        <file>images/ground/M1064 mortar carrier.png</file>
+        <file>images/ground/BMD-4M.png</file>
+        <file>images/ground/HQ-9BE.png</file>
+        <file>images/ground/HQ-22.png</file>
+        <file>images/ground/Bastion-P.png</file>
+        <file>images/ground/Type 15  Lightweight tank.png</file>
+        <file>images/ground/Namer heavy.png</file>
+        <file>images/ground/FM-90.png</file>
+        <file>images/ground/VCC-1.png</file>
+        <file>images/ground/LY-80.png</file>
+        <file>images/ground/HQ-22A.png</file>
+        <file>images/ground/PHL-03.png</file>
+        <file>images/ground/BTR-80.png</file>
+        <file>images/ground/VP-10.png</file>
+        <file>images/ground/2S7M Malka.png</file>
+        <file>images/ground/Cardom 120 mm.png</file>
+        <file>images/ground/DANA.png</file>
+        <file>images/ground/Oshkosh M-ATV.png</file>
+        <file>images/ground/M198.png</file>
+        <file>images/ground/Type 96 Main battle tank.png</file>
+        <file>images/ground/M1A2 Abrams.png</file>
+        <file>images/ground/JLTV.png</file>
+        <file>images/ground/HQ-17A.png</file>
+        <file>images/ground/quick reaction fighting .png</file>
+        <file>images/ground/PCH-191.png</file>
+        <file>images/ground/ZBD-04A.png</file>
+        <file>images/ground/2A36 Giatsint-B.png</file>
+        <file>images/ground/BTR-MDM Rakushka.png</file>
+        <file>images/ground/HQ-16.png</file>
+        <file>images/ground/ZBL-08 wheeled infantry fighting vehicle.png</file>
+        <file>images/ground/T-90M Proryv.png</file>
+        <file>images/ground/HQ-19 anti-ballistic.png</file>
+        <file>images/ground/PULS (Precise and Universal Launching System).png</file>
+        <file>images/ground/Al-Zarrar.png</file>
+        <file>images/ground/2A65 Msta-B.png</file>
+        <file>images/ground/ZBL-09.png</file>
+        <file>images/ground/Type 85-IIAP.png</file>
+        <file>images/ground/ZSD-05 Amphibious Vehicle.png</file>
+        <file>images/ground/HQ-9B-.png</file>
+        <file>images/ground/M142 HIMARS.png</file>
+        <file>images/ground/2S3 Akatsiya.png</file>
+        <file>images/ground/T-62M.png</file>
+        <file>images/ground/T-90A.png</file>
+        <file>images/ground/MIM-104 Patriot.png</file>
+        <file>images/ground/M113-based.png</file>
+        <file>images/ground/M109A7 Paladin.png</file>
+        <file>images/ground/Podlet-k1 radar.png</file>
+        <file>images/ground/T-62MV.png</file>
+        <file>images/ground/BTR-82k.png</file>
+        <file>images/ground/ZBD-04.png</file>
+        <file>images/ground/Achzarit heavy.png</file>
+        <file>images/ground/M113 Zelda.png</file>
+        <file>images/ground/Stryker Dragoon.png</file>
+        <file>images/ground/ZSL-10.png</file>
+        <file>images/ground/PHZ-89.png</file>
+        <file>images/ground/M58 MICLIC mine-clearing system.png</file>
+        <file>images/ground/krasukha-4.png</file>
+        <file>images/ground/M10 Booker.png</file>
+        <file>images/ground/M109A6 paladin.png</file>
+        <file>images/ground/Pole-21.png</file>
+        <file>images/ground/Type 79 Tank battle tank.png</file>
+        <file>images/ground/Typhoon-K.png</file>
+        <file>images/ground/Type 100 Tank.png</file>
+        <file>images/ground/HQ-17.png</file>
+        <file>images/ground/Type 59.png</file>
+        <file>images/ground/M109.png</file>
+        <file>images/ground/MRSAM.png</file>
+        <file>images/ground/M1150 Assault.png</file>
+        <file>images/ground/TOS-1A.png</file>
+        <file>images/ground/ZSD-89.png</file>
+        <file>images/ground/M46 field .png</file>
+        <file>images/ground/M109 Doher.png</file>
+        <file>images/ground/Buk-M2.png</file>
+        <file>images/ground/AMPV.png</file>
+        <file>images/ground/HQ-7.png</file>
+        <file>images/ground/M1A2 SEPv3 Abrams.png</file>
+        <file>images/ground/Palletized Load system .png</file>
+        <file>images/ground/Light Specialist .png</file>
+        <file>images/ground/2S19 Msta-S.png</file>
+        <file>images/ground/PCL-181 155 mm wheeled howitzer.png</file>
+        <file>images/ground/Tor-M2.png</file>
+        <file>images/ground/S-350 Vityaz.png</file>
+        <file>images/ground/M60 AVLB.png</file>
+        <file>images/ground/Roem 155.png</file>
+        <file>images/ground/ZBL-09 wheeled armoured vehicle.png</file>
+        <file>images/ground/M113.png</file>
+        <file>images/ground/S-300P.png</file>
+        <file>images/ground/Al-Khalid.png</file>
+        <file>images/ground/Fatah-I.png</file>
+        <file>images/ground/future infantry combat .png</file>
+        <file>images/ground/Repellent-1.png</file>
+        <file>images/ground/L-70 anti aircraft gun.png</file>
+        <file>images/ground/Tornado-G.png</file>
+        <file>images/ground/Rubezh.png</file>
+        <file>images/ground/LAR-160.png</file>
+        <file>images/ground/TMM-6.png</file>
+        <file>images/ground/Moskva-1.png</file>
+        <file>images/ground/HQ-9.png</file>
+        <file>images/ground/M1A1 Abrams.png</file>
+        <file>images/ground/Pantsir-S1.png</file>
+        <file>images/ground/WZ-551 family.png</file>
+        <file>images/ground/M1E3 Abrams.png</file>
+        <file>images/ground/M270A2 MLRS.png</file>
+        <file>images/ground/Leer-3.png</file>
+        <file>images/ground/TOS-2 Tosochka.png</file>
+        <file>images/ground/M777 155 mm howitzer.png</file>
+        <file>images/ground/Type 59-1.png</file>
+        <file>images/ground/D-30 howitzer.png</file>
+        <file>images/ground/WS-2.png</file>
+        <file>images/ground/Barak-8.png</file>
+        <file>images/ground/T-80UD.png</file>
+        <file>images/ground/Keshet 120mm.png</file>
+        <file>images/ground/BM-27 Uragan.png</file>
+        <file>images/ground/M114.png</file>
+        <file>images/ground/VN-series armoured vehicles.png</file>
+        <file>images/ground/BD-03 airborne infantry fighting vehicle.png</file>
+        <file>images/ground/WhAP.png</file>
+        <file>images/ground/Type 69.png</file>
+        <file>images/ground/ZSL-92.png</file>
+        <file>images/ground/Bal.png</file>
+        <file>images/ground/NASAMS.png</file>
+        <file>images/ground/Type 99 Main battle tank.png</file>
+        <file>images/ground/Predator Hawk.png</file>
+        <file>images/ground/SH-15.png</file>
+        <file>images/ground/talha.png</file>
+        <file>images/ground/Merkava Mk 4M.png</file>
+        <file>images/ground/M-SHORAD.png</file>
+        <file>images/ground/Puma Combat.png</file>
+        <file>images/ground/Eitan.png</file>
+        <file>images/ground/M119 105 mm howitzer.png</file>
+        <file>images/ground/Project Kusha.png</file>
+        <file>images/ground/S-300V series.png</file>
+        <file>images/ground/M1128 Stryker MGS.png</file>
+        <file>images/ground/2S4 Tyulpan.png</file>
+        <file>images/ground/Type 69 Legacy main battle tank.png</file>
+        <file>images/ground/PLL-09 122 mm wheeled artillery system.png</file>
+        <file>images/ground/M1299 ERCA.png</file>
+        <file>images/ground/Dragoon.png</file>
+        <file>images/ground/HQ-6D.png</file>
+        <file>images/ground/M120 mortar system.png</file>
+        <file>images/ground/2K12 Kub.png</file>
+        <file>images/ground/WS-3.png</file>
+        <file>images/ground/SR-5.png</file>
+        <file>images/ground/PLS truck.png</file>
+        <file>images/ground/2S1 Gvozdika.png</file>
+        <file>images/ground/ZTL-11 Armoured Gun.png</file>
+        <file>images/ground/Boomerang.png</file>
+        <file>images/ground/M1117 Guardian.png</file>
+        <file>images/ground/Murmansak BN.png</file>
+        <file>images/ground/ZBL-08 reconnaissance variants.png</file>
+        <file>images/ground/Tornado-S.png</file>
+        <file>images/ground/BM-21-GRAD.png</file>
+        <file>images/ground/BMD-2.png</file>
+        <file>images/ground/96L6 radar.png</file>
+        <file>images/ground/kamaz .png</file>
+        <file>images/ground/Iron fist APS.png</file>
+        <file>images/ground/RkhM-6.png</file>
+        <file>images/ground/Rafael Trophy APS.png</file>
+        <file>images/ground/Arrow 2.png</file>
+        <file>images/ground/Arrow 3.png</file>
+        <file>images/ground/Barak MX.png</file>
+        <file>images/ground/Caterpillar D9.png</file>
+        <file>images/ground/D9T.png</file>
+        <file>images/ground/Davids Sling.png</file>
+        <file>images/ground/Menatetz.png</file>
+        <file>images/ground/TMS-65U.png</file>
+        <file>images/ground/M88.png</file>
+        <file>images/ground/TruckMountedRadarUnit.png</file>
+        <file>images/ground/TetheredAerostatRadarSystem.png</file>
+        <file>images/ground/TATAKestrel.png</file>
+        <file>images/ground/TacticalUAVGroundControlStation.png</file>
+        <file>images/ground/T-90BridgeLayer.png</file>
+        <file>images/ground/SwathiWeaponLocatingRadar.png</file>
+        <file>images/ground/Strela-10.png</file>
+        <file>images/ground/Rohini3DRadar.png</file>
+        <file>images/ground/RevathiRadar.png</file>
+        <file>images/ground/RenaultSherpa.png</file>
+        <file>images/ground/PinakaLoaderCum.png</file>
+        <file>images/ground/PinakaCommandPost.png</file>
+        <file>images/ground/NAMICA.png</file>
+        <file>images/ground/NagMissileCarrier.png</file>
+        <file>images/ground/Muntra-SUGV.png</file>
+        <file>images/ground/Muntra-NUGV.png</file>
+        <file>images/ground/Muntra-MUGV.png</file>
+        <file>images/ground/MountedGunSystemMGS.png</file>
+        <file>images/ground/MobileEWJammerVehicle.png</file>
+        <file>images/ground/MobileCommandPost.png</file>
+        <file>images/ground/HighMobilityVehicle6x6.png</file>
+        <file>images/ground/HeavyEquipmentTransporter.png</file>
+        <file>images/ground/ForwardObservation.png</file>
+        <file>images/ground/DRDOPrahaar.png</file>
+        <file>images/ground/DRDOArmouredAmbulance.png</file>
+        <file>images/ground/ChemicalDetection.png</file>
+        <file>images/ground/BharaniRadar.png</file>
+        <file>images/ground/BattlefieldManagementSystem.png</file>
+        <file>images/ground/AshokLeylandMineProtectedVehicle.png</file>
+        <file>images/ground/ArmouredEngineerReconnaissance.png</file>
+        <file>images/ground/AkashSAMSystem.png</file>
+        <file>images/ground/AkashMissileLauncher.png</file>
+        <file>images/ground/Adobe_Express.png</file>
+        <file>images/ground/PatriotPAC-3.png</file>
+        <file>images/ground/GhadirRadar.png</file>
+        <file>images/ground/Bavar-373.png</file>
+        <file>images/ground/S-400_Triumf.png</file>
+        <file>images/ground/Cognitive-Radar.png</file>
+        <file>images/ground/JY-27V.png</file>
+        <file>images/ground/SLC-7.png</file>
+        <file>images/ground/YLC-8E.png</file>
+        <file>images/ground/Sea-Shore-Radar.png</file>
+        <file>images/ground/Passive-Radar.png</file>
+        <file>images/ground/Patriot-Radar-Unit.png</file>
+        <file>images/ground/Mobile-Early-Warning.png</file>
+        <file>images/ground/Bee-Eye-Radar.png</file>
+        <file>images/ground/S-300.png</file>
+        <file>images/ground/VehicleMountedJammer.png</file>
+        <file>images/ground/MobileSurveillance.png</file>
+        <file>images/ground/UnmannedGroundVehicleDRDO.png</file>
+        <file>images/ground/AllTerrainVehicleATV.png</file>
+        <file>images/ground/SnowScooterMilitary.png</file>
+        <file>images/ground/HighMobilityVehicle4x4.png</file>
+        <file>images/ground/LightSpecialist.png</file>
+        <file>images/ground/BMP-2NBCRecon.png</file>
+        <file>images/ground/BMP-2Repair.png</file>
+        <file>images/ground/BMP-2Ambulance.png</file>
+        <file>images/ground/BMP-2Command.png</file>
+        <file>images/ground/PinakaDiggi.png</file>
+        <file>images/ground/MissileLaunchControl.png</file>
+        <file>images/ground/MobileRadarControlCentre.png</file>
+        <file>images/ground/NuclearRadiationMonitoring.png</file>
+        <file>images/ground/BiologicalReconnaissance.png</file>
+        <file>images/ground/SignalsIntelligence.png</file>
+        <file>images/ground/FieldAmbulance.png</file>
+        <file>images/ground/TankTransporter.png</file>
+        <file>images/ground/CombatEngineeringTractor.png</file>
+        <file>images/ground/T-90ArmouredRecovery.png</file>
+        <file>images/ground/T-72ArmouredRecovery.png</file>
+        <file>images/ground/BridgeLayingTankVehicle.png</file>
+        <file>images/ground/MPATGMLauncher.png</file>
+        <file>images/ground/HelinaATGMLauncher.png</file>
+        <file>images/ground/NagATGM.png</file>
+        <file>images/ground/BharatDynamicsMissileLauncher.png</file>
+        <file>images/ground/Igla-S.png</file>
+        <file>images/ground/SPYDERAirDefenceSystem.png</file>
+        <file>images/ground/QRSAM.png</file>
+        <file>images/ground/Akash-NG.png</file>
+        <file>images/ground/SoltamM-46.png</file>
+        <file>images/ground/M777UltraLightHowitzer.png</file>
+        <file>images/ground/FH-77BBofors.png</file>
+        <file>images/ground/K9Vajra-T.png</file>
+        <file>images/ground/ATAGS.png</file>
+        <file>images/ground/DhanushHowitzer.png</file>
+        <file>images/ground/PinakaMk-II.png</file>
+        <file>images/ground/PinakaMk-I.png</file>
+        <file>images/ground/TataMineProtected.png</file>
+        <file>images/ground/MahindraRakshak.png</file>
+        <file>images/ground/MahindraMarksman.png</file>
+        <file>images/ground/MahindraArmado.png</file>
+        <file>images/ground/KalyaniM4.png</file>
+        <file>images/ground/Casspir.png</file>
+        <file>images/ground/TATAQuickReactionFighting.png</file>
+        <file>images/ground/OFBAditya.png</file>
+        <file>images/ground/NBCReconnaissance.png</file>
+        <file>images/ground/CarrierMortarTracked.png</file>
+        <file>images/ground/BMP-2Sarath.png</file>
+        <file>images/ground/T-72Ajeya.png</file>
+        <file>images/ground/T-90SBhishma.png</file>
+        <file>images/ground/ArjunMk-1A.png</file>
+        <file>images/ground/ArjunMBT.png</file>
+        <file>images/ground/LowLevelLightWeightRadar.png</file>
+        <file>images/ground/ArudhraRadar.png</file>
+        <file>images/ground/AsleshaMk-IRadar.png</file>
+        <file>images/ground/INDRA.png</file>
+        <file>images/ground/INDRAMk-IIRadar.png</file>
+        <file>images/ground/RajendraRadar.png</file>
+        <file>images/ground/CentralAcquisitionRadar.png</file>
+        <file>images/ground/AshwiniRadar.png</file>
+        <file>images/ground/SwordfishLongRangeTrackingRadar.png</file>
+        <file>images/ground/PJT-531BattlefieldSurveillanceRadar.png</file>
+        <file>images/sea/USS_Carl_Vinson__CVN-70.png</file>
+        <file>images/sea/USS_Canberra.png</file>
+        <file>images/sea/Ticonderoga-class_Guided-Missile_Cruiser__CG-removebg-preview.png</file>
+        <file>images/sea/Shahid_Soleimani-class_missile_corvette.png</file>
+        <file>images/sea/Peykaap-0class_Fast_Attack__Craft.png</file>
+        <file>images/sea/Kilo-class_Submarine.png</file>
+        <file>images/sea/Kaman-Class Missile Boat.png</file>
+        <file>images/sea/Jamaran_Frigate-removebg-preview.png</file>
+        <file>images/sea/Houdong_Fast_Attack_Craft.png</file>
+        <file>images/sea/Ashoore-Class_Fast_Attack_Craft.png</file>
+        <file>images/sea/Arleigh_Burke-class_Guided-Missile_Destroyer__DDG.png</file>
+        <file>images/sea/Alvand-class_Frigate.png</file>
     </qresource>
     <qresource prefix="/new/prefix2">
         <file>DB/Aircraft.db</file>

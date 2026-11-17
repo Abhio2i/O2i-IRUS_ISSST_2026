@@ -12,7 +12,5 @@ void main(ScriptEngine@ e)
     e.switchCoordinateSystem("mgrs");
 
     // ================= REPORT =================
-
-    // Screenshot 
     e.generatePDFReport("Map_Coordinate_System_Report.pdf");
 }

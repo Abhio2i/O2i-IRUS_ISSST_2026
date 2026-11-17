@@ -68,10 +68,11 @@
 #include "GUI/Testscript/testscriptdialog.h"  // by amjad
 #include "GUI/dialogwindowutils.h"
 #include "core/Hierarchy/ECS/Struct/Meta_Data_Component.h"
-#include "core/ScriptEngine/AutoScript/autoscriptmanager.h" ///////////
-#include "core/ScriptEngine/AutoScript/tcpautoscriptsource.h"//////////////////
-#include "core/ScriptEngine/AutoScript/autoscriptcontroller.h"  ////////////////////////
-#include <QHostAddress>//////////////////
+#include "core/ScriptEngine/AutoScript/autoscriptmanager.h"
+#include "core/ScriptEngine/AutoScript/tcpautoscriptsource.h"
+#include "core/ScriptEngine/AutoScript/autoscriptcontroller.h"
+#include <QHostAddress>
+// #include <GUI/Toolbars/timetoolbar.h>
 
 
 // %%% String Utility Function %%%
@@ -126,6 +127,12 @@ ScenarioEditor::ScenarioEditor(QWidget *parent)
         m_apiMapWidget->dynamicCanvas()->setWorld(&hierarchy->world);
         m_apiMapWidget->editorCanvas()->setWorld(&hierarchy->world);
         m_apiMapWidget->editorCanvas()->setHierarchy(hierarchy);
+
+        if (m_apiMapWidget && m_apiMapWidget->dynamicCanvas()) {
+            m_apiMapWidget->dynamicCanvas()->setEntityZoomScaleEnabled(
+                ApplicationDialog::getGlobalEntityZoomScale());
+        }
+
     }
 
     SceneRenderer *renderer = scenario->scenerenderer;
@@ -143,6 +150,12 @@ ScenarioEditor::ScenarioEditor(QWidget *parent)
     HierarchyConnector::instance()->setLibrary(library);
     HierarchyConnector::instance()->setLibTreeView(libTreeView);
     m_apiMapWidget->editorCanvas()->setHierarchy(hierarchy);
+    // m_timeToolBar = new TimeToolBar(this);
+    // addToolBar(Qt::TopToolBarArea, m_timeToolBar);
+    // connect(m_timeToolBar, &TimeToolBar::timeChanged, this, [this](float seconds) {
+    //     // TODO: scenario start-time field mein seconds set karo
+    //     markUnsavedChanges();
+    // });
 
     // ===== AutoScript (remote script execution over LAN) ===== by amjad ===============
     autoScriptController = new AutoScriptController(scriptengine, this);
@@ -176,7 +189,7 @@ ScenarioEditor::ScenarioEditor(QWidget *parent)
                                              "QLabel { color: #C42B1C; font-weight: bold; "
                                              "font-size: 11px; padding: 0 8px; }"));
             });
-    // ======================================
+    // =========================================================================
 
     connect(m_apiMapWidget->editorCanvas(), &EditorCanvas::entitySelectedById,
             treeView, &HierarchyTree::selectEntityById);
@@ -188,7 +201,6 @@ ScenarioEditor::ScenarioEditor(QWidget *parent)
             this, [this](const QString& entityId) {
                 if (!hierarchy || entityId.isEmpty())
                     return;
-
                 Formation* form = nullptr;
                 auto eit = hierarchy->Entities.find(entityId.toStdString());
                 if (eit != hierarchy->Entities.end()) {
@@ -389,6 +401,7 @@ ScenarioEditor::ScenarioEditor(QWidget *parent)
                     }
                 });
     }
+
     connect(m_apiMapWidget->editorCanvas(), &EditorCanvas::entitySelectedById,
             this, [this](const QString& entityId) {
                 if (!hierarchy || entityId.isEmpty())
@@ -416,7 +429,7 @@ ScenarioEditor::ScenarioEditor(QWidget *parent)
     connect(m_apiMapWidget->map(), &MapWidget::gisInteractionEnabledChanged,
             this, [this](bool enabled) {
                 if (designToolBar)
-    designToolBar->setEnabled(!enabled);
+                    designToolBar->setEnabled(!enabled);
                 if (m_apiMapToolbar) {
                     if (QAction* gisAct = m_apiMapToolbar->gisInteractionAction()) {
                         gisAct->setVisible(true);
@@ -560,7 +573,7 @@ ScenarioEditor::ScenarioEditor(QWidget *parent)
         }
         if (type == "entity") {
             const QString entityId = data["ID"].toString();
-                      if (m_apiMapWidget)
+            if (m_apiMapWidget)
                 m_apiMapWidget->centerOnEntity(entityId, false);
         }
     });
@@ -804,6 +817,7 @@ void ScenarioEditor::setupEnhancedDockWidgets()
                             (fileName.isEmpty() || fileName == "Library")
                                 ? "Library" : "Library - " + fileName);
                     });
+
             connect(libDialog, &QDialog::finished, this, [=]() {
                 libTreeView->setParent(libraryDock);
                 libraryDock->setWidget(libTreeView);
@@ -1324,6 +1338,7 @@ void ScenarioEditor::resetLayout()
         consoleDock->raise();
         sidebarDock->raise();
         inspectorDock->raise();
+
     });
 }
 
@@ -1582,8 +1597,6 @@ void ScenarioEditor::showProfileInfo()
 {
     ProfileInfoDialog::showProfileInfo(this);
 }
-
-// %%% Application Settings Dialog %%%
 /* Show application settings dialog */
 void ScenarioEditor::showApplicationDialog()
 {
@@ -1592,9 +1605,13 @@ void ScenarioEditor::showApplicationDialog()
         if (m_apiMapWidget && m_apiMapWidget->dynamicCanvas())
             m_apiMapWidget->dynamicCanvas()->setImageScale(px);
     });
+    if (m_apiMapWidget && m_apiMapWidget->dynamicCanvas()) {
+        connect(&dialog, &ApplicationDialog::entityZoomScaleState,
+                m_apiMapWidget->dynamicCanvas(),
+                &DynamicCanvas::setEntityZoomScaleEnabled);
+    }
     dialog.exec();
 }
-
 void ScenarioEditor::onRunScriptFileRequested(const QString& filePath)
 {
     if (!QFile::exists(filePath)) {

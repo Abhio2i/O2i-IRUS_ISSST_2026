@@ -59,7 +59,7 @@
 #include <GUI/Hierarchytree/addformationdialog.h>
 #include <GUI/Settings/applicationdialog.h>
 #include "Setup.h"
-#include "GUI/Hierarchytree/addweapondialog.h"
+#include "GUI/Hierarchytree/additemdialog/addweapondialog.h"
 #include "GUI/Tacticaldisplay/entityinfodialog.h"
 #include "GUI/mainwindow.h"
 #include <QStandardPaths>
@@ -67,6 +67,15 @@
 #include "core/Hierarchy/ECS/Struct/Meta_Data_Component.h"
 #include "GUI/Canvas/map_with_canvas.h"
 #include "GUI/dialogwindowutils.h"
+#include <GIS_API/frontend/widgets/map_widget.h>
+#include <GIS_API/backend/api/shape_api.h>
+#include "GUI/Hierarchytree/additemdialog/additemdialog.h"
+#include <QProgressDialog>
+#include <QApplication>
+#include <QRandomGenerator>
+#include <QtMath>
+#include <QPolygonF>
+#include <QVector2D>
 
 // %%% Static Instance %%%
 
@@ -79,9 +88,9 @@ static void changeFormationMothership(Formation* form, const QString& newMotherI
 
     Entity* newMotherEntity = newIt->second;
     Platform* newMother = dynamic_cast<Platform*>(newMotherEntity);
+
     if (!newMother) return;
 
-    // 1. Clear old mothership
     Platform* oldMother = nullptr;
     if (form->mothership->entity) {
         oldMother = dynamic_cast<Platform*>(form->mothership->entity);
@@ -93,7 +102,6 @@ static void changeFormationMothership(Formation* form, const QString& newMotherI
         }
     }
 
-    // 2. Free slot if new mother was an ally
     std::string freedSlot;
     if (form->formationPositions) {
         for (auto& pair : *form->formationPositions) {
@@ -106,14 +114,12 @@ static void changeFormationMothership(Formation* form, const QString& newMotherI
         }
     }
 
-    // 3. Set new mothership
     form->mothership->entity = newMotherEntity;
     newMother->dynamicModel.formation = form;
     newMother->dynamicModel.follow = false;
     newMother->dynamicModel.followEntity = nullptr;
     newMother->dynamicModel.formationPosition = nullptr;
 
-    // 4. Old mother → empty ally slot
     if (oldMother && form->formationPositions) {
         FormationPosition* targetSlot = nullptr;
         if (!freedSlot.empty()) {
@@ -137,7 +143,6 @@ static void changeFormationMothership(Formation* form, const QString& newMotherI
         }
     }
 
-    // 5. Re-link remaining allies
     if (form->formationPositions) {
         for (auto& pair : *form->formationPositions) {
             if (!pair.second || !pair.second->entity) continue;
@@ -148,14 +153,13 @@ static void changeFormationMothership(Formation* form, const QString& newMotherI
             p->dynamicModel.follow = true;
         }
     }
-    // 6. Refresh geometry
     form->FormationTypeUpdate();
 }
 double dmsToDecimal(const QString& dms)
 {
     if (dms.isEmpty())
         return 0.0;
-    QChar direction = dms.at(0); // N, S, E, W
+    QChar direction = dms.at(0);
     QString value = dms.mid(1);
     QStringList parts = value.split(':');
     if (parts.size() != 3)
@@ -167,7 +171,6 @@ double dmsToDecimal(const QString& dms)
         degrees +
         (minutes / 60.0) +
         (seconds / 3600.0);
-    // South & West negative hote hain
     if (direction == 'S' || direction == 'W')
         decimal = -decimal;
     return decimal;
@@ -342,10 +345,30 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                 double initLat, double initlon, float heading) {
 
                 if (!dialog) return;
-                if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView)) {
-                    return;
-                }
+                // if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView)) {
+                //     return;
+                // }
                 QString sensorType = dialog->getSensorType();
+                if(!sensortype.isEmpty()){
+                    sensorType = sensortype;
+                }
+                if (!dialog->getSelectedEntityId().isEmpty()) {
+                    Entity* src = library->getEntityById(dialog->getSelectedEntityId());
+                    if (src && src->type == Constants::EntityType::Weapon) {
+                        if (Weapon* srcW = dynamic_cast<Weapon*>(src)) {
+                            QString t = srcW->weaponTypeName();
+                            if (dynamic_cast<Bomb*>(srcW))           t = "Bomb";
+                            else if (dynamic_cast<Sonobuoy*>(srcW))  t = "Sonobuoy";
+                            else if (dynamic_cast<Torpedo*>(srcW))   t = "Torpedo";
+                            else if (dynamic_cast<Artillery*>(srcW)) t = "Artillery";
+                            else if (dynamic_cast<Rocket*>(srcW))    t = "Rocket";
+                            else if (dynamic_cast<Flare*>(srcW))     t = "Flare";
+                            else if (dynamic_cast<Chaff*>(srcW))     t = "Chaff";
+                            else if (dynamic_cast<Missile*>(srcW))   t = "Missile";
+                            sensorType = t;
+                        }
+                    }
+                }
                 Entity* newEntity = hierarchy->addEntity(parentId, entityName, isProfileParent, sensorType);
 
                 if (!newEntity) return;
@@ -369,6 +392,10 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                 }
 
                 QSet<QString> addedComponents;
+                if(newEntity->type == Constants::EntityType::Weapon){
+                    newEntity->addSupportedcomponent();
+                }
+
                 for (const auto& component : components.keys()) {
                     if (components.value(component).toBool() && !addedComponents.contains(component)) {
                         try {
@@ -406,97 +433,289 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                     if (initLat < 190) {
                         platform->transform.setGeoCord(initLat, initlon);
                     }
+                    // if (dialog->isScEnabled()) {
+                    //     auto* data = platform->root->world.GetComponent<ECS::Entity_Data>(platform->ecsID);
+                    //     if (data) {
+                    //         data->active = true;
+                    //         platform->Active = true;
+                    //     }
 
+                    //     const float range = dialog->getRange() / 2.0f;
+                    //     QPointF city = dialog->getCity();
+                    //     double lat = city.x() + ((QRandomGenerator::global()->generateDouble() - 0.5) * 2.0 * (range / 111.111));
+                    //     double lon = city.y() + ((QRandomGenerator::global()->generateDouble() - 0.5) * 2.0 * (range / 100.0));
+                    //     double heading = 360.0 * QRandomGenerator::global()->generateDouble();
+
+                    //     if (initLat < 190.0) {
+                    //         lat = initLat;
+                    //         lon = initlon;
+                    //     }
                     if (dialog->isScEnabled()) {
                         auto* data = platform->root->world.GetComponent<ECS::Entity_Data>(platform->ecsID);
-                        data->active = true;
-                        platform->Active = true;
-                        const float range = dialog->getRange() / 2;
-                        QPointF city = dialog->getCity();
-                        double lat = city.x() + ((QRandomGenerator::global()->generateDouble() - 0.5) * 2 * (range / 111.111));
-                        double lon = city.y() + ((QRandomGenerator::global()->generateDouble() - 0.5) * 2 * (range / 100));
-                        double heading = 360 * QRandomGenerator::global()->generateDouble();
+                        if (data) {
+                            data->active = true;
+                            platform->Active = true;
+                        }
 
-                        if (initLat < 190) {
+                        const float range = dialog->getRange() / 2.0f;
+                        QPointF city = dialog->getCity();
+                        double lat = city.x() + ((QRandomGenerator::global()->generateDouble() - 0.5) * 2.0 * (range / 111.111));
+                        double lon = city.y() + ((QRandomGenerator::global()->generateDouble() - 0.5) * 2.0 * (range / 100.0));
+                        double heading = 360.0 * QRandomGenerator::global()->generateDouble();
+                        {
+                            auto [nLat, nLon] = calculateNewLatLong(12.9716, 77.5946, 0.0,   50.0);
+                            auto [eLat, eLon] = calculateNewLatLong(12.9716, 77.5946, 90.0,  50.0);
+                            auto [sLat0, sLon0] = calculateNewLatLong(12.9716, 77.5946, 180.0, 50.0);
+
+                        }
+
+                        // ===== SECTOR placement =====
+                        if (dialog->isSectorType()) {
+                            const double startB = dialog->getSectorStartAngle();
+                            const double endB   = dialog->getSectorEndAngle();
+                            const double rMin   = dialog->getSectorMinRange();   // km
+                            const double rMax   = qMax(rMin, (double)dialog->getSectorMaxRange());
+
+                            double span = endB - startB;
+                            if (span <= 0.0) span += 360.0;
+
+                            const double bearing = std::fmod(
+                                startB + QRandomGenerator::global()->generateDouble() * span, 360.0);
+
+                            const double u = QRandomGenerator::global()->generateDouble();
+                            const double dist = std::sqrt(u * (rMax * rMax - rMin * rMin) + rMin * rMin);
+
+                            auto [sLat, sLon] = calculateNewLatLong(city.x(), city.y(), bearing, dist);
+                            lat = sLat;
+                            lon = sLon;
+                        }
+
+                        if (initLat < 190.0) {
                             lat = initLat;
                             lon = initlon;
                         }
+
                         platform->transform.setGeoCord(lat, lon);
                         platform->transform.setFromEulerAngles(QVector3D(0, heading, 0));
 
+                        // ---------- Parameters from dialog ----------
                         QString trajectoryType   = dialog->customDialog.getShape();
                         int     waypointcount    = dialog->customDialog.getWaypointsCount();
                         float   trajectorylength = dialog->customDialog.getLength();
-                        if (trajectoryType == "Circle" || trajectoryType == "Spiral")
-                            trajectorylength = dialog->customDialog.getRadius();
+                        float   radius           = dialog->customDialog.getRadius();
+                        float   majorAxis        = dialog->customDialog.getMajorAxis();
+                        float   minorAxis        = dialog->customDialog.getMinorAxis();
+                        QString orientation      = dialog->customDialog.getOrientation();
+                        QString startPoint       = dialog->customDialog.getStartPoint();
+                        QString circleDir        = dialog->customDialog.getCirclePoint();
 
-                        float waypointoffsetlength = trajectorylength / waypointcount;
+                        if (trajectoryType == "Circle" || trajectoryType == "Spiral" || trajectoryType == "Circular") {
+                            trajectorylength = radius;
+                        }
+                        else if (trajectoryType == "Oval" || trajectoryType == "Ellipse") {
+                            trajectorylength = majorAxis;
+                        }
+
+                        float waypointoffsetlength = (waypointcount > 1) ? (trajectorylength / (waypointcount - 1)) : trajectorylength;
+
                         float minSpeed    = dialog->customDialog.getMinSpeed();
                         float maxSpeed    = dialog->customDialog.getMaxSpeed();
                         float speed       = minSpeed;
-                        float speedOffset = (maxSpeed - minSpeed) / waypointcount;
-                        float minAltitude  = dialog->customDialog.getMinAltitude();
-                        float maxAltitude  = dialog->customDialog.getMaxAltitude();
-                        float Altitude     = minAltitude;
-                        float AltitudeOffset = (maxAltitude - minAltitude) / waypointcount;
+                        float speedOffset = (waypointcount > 1) ? ((maxSpeed - minSpeed) / (waypointcount - 1)) : 0.0f;
+
+                        float minAltitude    = dialog->customDialog.getMinAltitude();
+                        float maxAltitude    = dialog->customDialog.getMaxAltitude();
+                        float Altitude       = minAltitude;
+                        float AltitudeOffset = (waypointcount > 1) ? ((maxAltitude - minAltitude) / (waypointcount - 1)) : 0.0f;
+
                         float head       = heading;
-                        float headOffset = 360 / waypointcount;
+                        float headOffset = (waypointcount > 0) ? (360.0f / waypointcount) : 0.0f;
 
-                        // if (platform->category == Entity::SubMarineCategory::Submarine) {
-                        //     Altitude = 0;
-                        // }
+                        // First waypoint
 
-                        Altitude = 0;
-                        if (waypointcount > 1) {
+                        {
                             Waypoints* newWaypoint = new Waypoints();
                             newWaypoint->position  = new Vector(lat, Altitude, lon);
                             newWaypoint->speed     = speed;
                             platform->trajectory.addTrajectory(newWaypoint);
                         }
-                        if (platform->category == Entity::Category::Marine && platform->marineCategory == Entity::SubMarineCategory::Submarine) {
+
+                        if (platform->category == Entity::Category::Marine &&
+                            platform->marineCategory == Entity::SubMarineCategory::Submarine) {
                             Altitude -= AltitudeOffset;
                         }
-                        if (platform->category == Entity::Category::Air ) {
+                        if (platform->category == Entity::Category::Air) {
                             Altitude += AltitudeOffset;
                         }
-                        for (int i = 0; i < waypointcount; i++) {
-                            auto [latAtRadius, lonAtRadius] = calculateNewLatLong(lat, lon, head, waypointoffsetlength);
-                            Waypoints* newWaypoint = new Waypoints();
-                            newWaypoint->position  = new Vector(latAtRadius, Altitude, lonAtRadius);
-                            newWaypoint->speed     = speed;
-                            platform->trajectory.addTrajectory(newWaypoint);
-                            speed    += speedOffset;
+
+                        double centerLat = lat;
+                        double centerLon = lon;
+
+                        for (int i = 1; i < waypointcount; ++i) {
+
+                            double nextLat = lat;
+                            double nextLon = lon;
+
+                            // ===== LINE =====
+                            if (trajectoryType == "Line") {
+                                auto [latAtRadius, lonAtRadius] = calculateNewLatLong(lat, lon, head, waypointoffsetlength);
+                                nextLat = latAtRadius;
+                                nextLon = lonAtRadius;
+                            }
+                            // ===== ZIGZAG =====
+                            else if (trajectoryType == "Zigzag") {
+                                auto [latAtRadius, lonAtRadius] = calculateNewLatLong(lat, lon, head, waypointoffsetlength);
+                                nextLat = latAtRadius + (QRandomGenerator::global()->generateDouble() - 0.5) * 0.08;
+                                nextLon = lonAtRadius + (QRandomGenerator::global()->generateDouble() - 0.5) * 0.08;
+                            }
+                            // ===== RECTANGLE =====
+                            else if (trajectoryType == "Rectangle") {
+                                int quarter = (i * 4) / waypointcount;
+                                float rectHead = head + quarter * 90.0f;
+                                auto [latAtRadius, lonAtRadius] = calculateNewLatLong(lat, lon, rectHead, waypointoffsetlength);
+                                nextLat = latAtRadius;
+                                nextLon = lonAtRadius;
+                            }
+                            // ===== RACECOURSE =====
+                            else if (trajectoryType == "Racecourse") {
+                                float progress = (float)i / waypointcount;
+                                float totalLen = trajectorylength;
+                                float straightLen = totalLen * 0.6f;
+                                float turnRadius  = totalLen * 0.2f;
+
+                                if (progress < 0.3f) {
+                                    // First straight
+                                    auto [latAtRadius, lonAtRadius] = calculateNewLatLong(centerLat, centerLon, head, progress * straightLen * 1.67f);
+                                    nextLat = latAtRadius;
+                                    nextLon = lonAtRadius;
+                                }
+                                else if (progress < 0.5f) {
+                                    // First semicircle turn
+                                    float t = (progress - 0.3f) / 0.2f;
+                                    float turnHead = head + t * 180.0f;
+                                    auto [latAtRadius, lonAtRadius] = calculateNewLatLong(centerLat, centerLon, turnHead, turnRadius);
+                                    nextLat = latAtRadius;
+                                    nextLon = lonAtRadius;
+                                }
+                                else if (progress < 0.8f) {
+                                    // Second straight (opposite direction)
+                                    float t = (progress - 0.5f) / 0.3f;
+                                    auto [latAtRadius, lonAtRadius] = calculateNewLatLong(centerLat, centerLon, head + 180.0f, t * straightLen);
+                                    nextLat = latAtRadius;
+                                    nextLon = lonAtRadius;
+                                }
+                                else {
+                                    // Second semicircle turn
+                                    float t = (progress - 0.8f) / 0.2f;
+                                    float turnHead = head + 180.0f + t * 180.0f;
+                                    auto [latAtRadius, lonAtRadius] = calculateNewLatLong(centerLat, centerLon, turnHead, turnRadius);
+                                    nextLat = latAtRadius;
+                                    nextLon = lonAtRadius;
+                                }
+                            }
+
+                            // ===== CIRCLE =====
+                            else if (trajectoryType == "Circle" || trajectoryType == "Circular") {
+                                float angle = (2.0f * M_PI * i) / waypointcount;
+
+                                if (circleDir == "Anti-clockwise") {
+                                    angle = -angle;
+                                }
+                                // Perfect circle from center
+                                double dLat = (radius * std::sin(angle)) / 111.111;
+                                double dLon = (radius * std::cos(angle)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+                                nextLat = centerLat + dLat;
+                                nextLon = centerLon + dLon;
+                            }
+
+                            // ===== SPIRAL =====
+                            else if (trajectoryType == "Spiral") {
+                                float angle = (2.0f * M_PI * i) / waypointcount;
+
+                                if (circleDir == "Anti-clockwise") {
+                                    angle = -angle;
+                                }
+
+                                // Radius gradually increases
+                                float currentRadius = radius * (0.4f + 0.8f * ((float)i / waypointcount));
+                                double dLat = (currentRadius * std::sin(angle)) / 111.111;
+                                double dLon = (currentRadius * std::cos(angle)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+                                nextLat = centerLat + dLat;
+                                nextLon = centerLon + dLon;
+                            }
+
+                            // ===== OVAL =====
+                            else if (trajectoryType == "Oval") {
+                                float t = (2.0f * M_PI * i) / waypointcount;
+
+                                float a = majorAxis * 0.85f;
+                                float b = minorAxis * 1.15f;
+
+                                if (orientation == "Vertical") {
+                                    std::swap(a, b);
+                                }
+
+                                double dLat = (b * std::sin(t)) / 111.111;
+                                double dLon = (a * std::cos(t)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+
+                                nextLat = centerLat + dLat;
+                                nextLon = centerLon + dLon;
+                            }
+
+                            // ===== ELLIPSE =====
+                            else if (trajectoryType == "Ellipse") {
+                                float t = (2.0f * M_PI * i) / waypointcount;
+
+                                float a = majorAxis;   // longer axis
+                                float b = minorAxis;   // shorter axis
+
+                                if (orientation == "Vertical") {
+                                    std::swap(a, b);
+                                }
+
+                                // Pure mathematical ellipse
+                                double dLat = (b * std::sin(t)) / 111.111;
+                                double dLon = (a * std::cos(t)) / (111.111 * std::cos(centerLat * M_PI / 180.0));
+
+                                nextLat = centerLat + dLat;
+                                nextLon = centerLon + dLon;
+                            }
+
+                            // ===== Fallback =====
+
+                            else {
+                                auto [latAtRadius, lonAtRadius] = calculateNewLatLong(lat, lon, head, waypointoffsetlength);
+                                nextLat = latAtRadius;
+                                nextLon = lonAtRadius;
+                            }
+
+                            // Speed & Altitude update
+                            speed += speedOffset;
+
                             if (platform->category == Entity::Category::Marine) {
                                 Altitude -= AltitudeOffset;
-                                Altitude = Altitude > 0 ? 0 : Altitude;
-                                if(platform->marineCategory != Entity::SubMarineCategory::Submarine){
+                                if (Altitude > 0) Altitude = 0;
+                                if (platform->marineCategory != Entity::SubMarineCategory::Submarine) {
                                     Altitude = 0;
                                 }
-                            }else
-                            if (platform->category == Entity::Category::Ground) {
+                            }
+                            else if (platform->category == Entity::Category::Ground) {
                                 Altitude = 0;
                             }
                             else {
                                 Altitude += AltitudeOffset;
                             }
 
-                            if (dialog && trajectoryType == "Zigzag") {
-                                lat = latAtRadius + (QRandomGenerator::global()->generateDouble() - 0.5) * 0.1;
-                                lon = lonAtRadius + (QRandomGenerator::global()->generateDouble() - 0.5) * 0.1;
-                            } else if (trajectoryType == "Circle") {
-                                if (dialog->customDialog.getStartPoint() == "intial") { lat = latAtRadius; lon = lonAtRadius; }
-                                if (dialog->customDialog.getCirclePoint() == "Clockwise") head += headOffset;
-                                else head -= headOffset;
-                            } else if (trajectoryType == "Spiral") {
-                                if (dialog->customDialog.getStartPoint() == "intial") { lat = latAtRadius; lon = lonAtRadius; }
-                                if (dialog->customDialog.getCirclePoint() == "Clockwise") head += headOffset * (1 + waypointcount / 100);
-                                else head -= headOffset * (1 + waypointcount / 100);
-                                waypointoffsetlength *= 1.02;
-                            } else {
-                                lat = latAtRadius;
-                                lon = lonAtRadius;
-                            }
+                            Waypoints* newWaypoint = new Waypoints();
+                            newWaypoint->position  = new Vector(nextLat, Altitude, nextLon);
+                            newWaypoint->speed     = speed;
+                            platform->trajectory.addTrajectory(newWaypoint);
+
+                            // Update current position
+                            lat = nextLat;
+                            lon = nextLon;
                         }
+
                         emit hierarchy->trajectoryisAdded(platform->ID.c_str(), &platform->trajectory);
 
                         if (dialog->isScSensorsEnabled()) {
@@ -515,9 +734,9 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                             std::string id = platform->radios.ID;
                             hierarchy->addSubComponent(QString::fromStdString(id), "Radio" + entityName);
                         }
+
                         // platform->dynamicModel.moveSpeed = 0;
                         platform->dynamicModel.Altitude  = 0;
-
                         if (dialog->isScSensorsEnabled()) {
                             const int minRadRng = dialog->getMinRadarRange();
                             const int maxRadRng = dialog->getMaxRadarRange();
@@ -619,12 +838,12 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                             for (const std::string& compName : weapon->getSupportedComponents()) {
                                 std::string compID;
                                 if      (compName == "transform"    )      compID = weapon->transform.ID;
-                                else if (compName == "rigidbody"    )      compID = weapon->rigidbody.ID;
+                                // else if (compName == "rigidbody"    )      compID = weapon->rigidbody.ID;
                                 else if (compName == "collider"     )       compID = weapon->collider.ID;
-                                else if (compName == "trajectory"   )     compID = weapon->trajectory.ID;
+                                // else if (compName == "trajectory"   )     compID = weapon->trajectory.ID;
                                 else if (compName == "bitmap"       ) compID = weapon->meshRenderer2d.ID;
-                                else if (compName == "dynamicModel" )   compID = weapon->dynamicModel.ID;
-                                else if (compName == "crossSection" )   compID = weapon->crossSection.ID;
+                                // else if (compName == "dynamicModel" )   compID = weapon->dynamicModel.ID;
+                                // else if (compName == "crossSection" )   compID = weapon->crossSection.ID;
                                 else continue;
                                 emit hierarchy->componentAdded(
                                     weaponQID,
@@ -814,28 +1033,86 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
     connect(treeView, &HierarchyTree::addWeaponToEntitiesRequested, this,
             [=](QList<QVariantMap> entities) {
                 if (entities.isEmpty()) return;
-
-                Hierarchy* dbHierarchy = library ? library : hierarchy;
-                AddWeaponDialog dlg(treeView, dbHierarchy, false);
-                if (dlg.exec() != QDialog::Accepted) return;
-
-                QString selectedId = dlg.selectedEntityId();
-                QString weaponName = dlg.weaponName().trimmed();
-                if (weaponName.isEmpty()) return;
                 if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
                     return;
+                MainWindow* mw = MainWindow::instance();
 
-                QString typeName = "Missile";
-                if (!selectedId.isEmpty() && dbHierarchy) {
-                    auto dbIt = dbHierarchy->Weapons.find(selectedId.toStdString());
-                    if (dbIt != dbHierarchy->Weapons.end() && dbIt->second)
-                        typeName = dbIt->second->weaponTypeName();
+                Hierarchy* dbHierarchy = (mw && mw->getDatabaseHierarchy())
+                                             ? mw->getDatabaseHierarchy()
+                                             : (library ? library : hierarchy);
+
+                const bool isDatabaseCtx =
+                    hierarchy->isDatabase ||
+                    (mw && mw->databaseEditor && mw->databaseEditor->hierarchy == hierarchy);
+                const bool isRuntimeCtx =
+                    mw && mw->runtimeEditor && mw->runtimeEditor->hierarchy == hierarchy;
+
+                const QString editorCtx = isDatabaseCtx ? QStringLiteral("database")
+                                          : isRuntimeCtx ? QStringLiteral("runtime")
+                                                         : QStringLiteral("scenario");
+
+                auto attachWeapon = [=](Platform* platform, Weapon* weapon,
+                                        const QString& displayName) {
+                    platform->weapons.weapons->insert({weapon->ID, weapon});
+                    hierarchy->Weapons.insert({weapon->ID, weapon});
+                    hierarchy->Entities.insert({weapon->ID, weapon});
+
+                    emit hierarchy->subComponentAdded(
+                        QString::fromStdString(platform->weapons.ID),
+                        QString::fromStdString(weapon->ID),
+                        displayName);
+
+                    QString weaponQID = QString::fromStdString(weapon->ID);
+                    for (const std::string& compName : weapon->getSupportedComponents()) {
+                        std::string compID;
+                        if      (compName == "transform") compID = weapon->transform.ID;
+                        else if (compName == "collider")  compID = weapon->collider.ID;
+                        else if (compName == "bitmap")    compID = weapon->meshRenderer2d.ID;
+                        else continue;
+                        emit hierarchy->componentAdded(
+                            weaponQID,
+                            QString::fromStdString(compID),
+                            QString::fromStdString(compName));
+                    }
+                };
+
+                AddItemDialog dlg(AddItemDialog::EntityType,
+                                  "Weapon",
+                                  AddItemDialog::NormalMode,
+                                  isDatabaseCtx ? hierarchy : dbHierarchy,
+                                  treeView,
+                                  editorCtx);
+                dlg.setWindowTitle("Add Weapon");
+                if (dlg.exec() != QDialog::Accepted) return;
+
+                const QString weaponName = dlg.getName().trimmed();
+                if (weaponName.isEmpty()) return;
+
+                QString typeName;
+                QString selectedId;
+                QJsonObject obj;
+
+                if (isDatabaseCtx) {
+                    typeName = dlg.getWeaponType();
                 } else {
-                    typeName = dlg.weaponTypeStr();
+                    selectedId = dlg.getSelectedEntityId();
+                    if (selectedId.isEmpty() || !dbHierarchy) return;
+
+                    auto dbIt = dbHierarchy->Weapons.find(selectedId.toStdString());
+                    if (dbIt == dbHierarchy->Weapons.end() || !dbIt->second) return;
+                    typeName = obj["weaponType"].toString();
+                    obj = dbIt->second->toJson();
+                    if(typeName.isEmpty()){
+                        QJsonObject WeaponTypeObj = obj["weaponType"].toObject();
+                        typeName = WeaponTypeObj["value"].toString();
+                    }
+
+
+                    // if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                    //     return;
                 }
 
-                QJsonObject hoistedCfg = dlg.configJson();
-                hoistedCfg["weaponTypeName"] = typeName;
+                const int count = dlg.getNumber();
 
                 for (const QVariantMap& data : entities) {
                     QCoreApplication::processEvents();
@@ -844,73 +1121,23 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                     if (it == hierarchy->Entities.end()) continue;
 
                     Platform* platform = dynamic_cast<Platform*>(it->second);
-                    if (!platform) continue;
-                    int i = 1;
-                    if (dlg.weaponType() == Weapon::WeaponType::Sonobuoy && dlg.m_count) {
-                        i = dlg.m_count->value();
-                    }
-                    for (int k = 0; k < i; k++) {
-                        QCoreApplication::processEvents();
-                        Weapon* weapon       = createWeapon(typeName, hierarchy);
-                        weapon->Name         = weaponName.toStdString() + QString::number(k).toStdString();
-                        weapon->parentEntity = platform;
-                        weapon->ID           = Uuid::generateShortUniqueID();
-                        weapon->parentID     = platform->ID;
-                        if (/*!platform->weapons ||*/ !platform->weapons.weapons) {
-                            delete weapon;
-                            continue;
-                        }
-                        weapon->init();
-                        if (!selectedId.isEmpty() && dbHierarchy) {
-                            auto dbIt = dbHierarchy->Weapons.find(selectedId.toStdString());
-                            if (dbIt != dbHierarchy->Weapons.end() && dbIt->second) {
-                                std::string savedId     = weapon->ID;
-                                std::string savedName   = weapon->Name;
-                                std::string savedParent = weapon->parentID;
-                                weapon->fromJson(dbIt->second->toJson());
-                                weapon->ID     = savedId;
-                                weapon->Name   = savedName;
-                                weapon->parentID = savedParent;
-                            }
-                        } else {
-                            weapon->fromJson(hoistedCfg);
-                            weapon->Name = weaponName.toStdString() + QString::number(k).toStdString();
-                        }
+                    if (!platform || !platform->weapons.weapons) continue;
 
-                        weapon->syncComponentsFromWeaponData();
-                        platform->weapons.weapons->insert({weapon->ID, weapon});
-                        hierarchy->Weapons.insert({weapon->ID, weapon});
-                        hierarchy->Entities.insert({weapon->ID, weapon});
-
-                        emit hierarchy->subComponentAdded(
-                            QString::fromStdString(platform->weapons.ID),
-                            QString::fromStdString(weapon->ID),
-                            weaponName + QString::number(k));
-
-                        QString weaponQID = QString::fromStdString(weapon->ID);
-                        for (const std::string& compName : weapon->getSupportedComponents()) {
-                            std::string compID;
-                            if      (compName == "transform"    /*&& weapon->transform*/)      compID = weapon->transform.ID;
-                            else if (compName == "rigidbody"    /*&& weapon->rigidbody*/)      compID = weapon->rigidbody.ID;
-                            else if (compName == "collider"     /*&& weapon->collider*/)       compID = weapon->collider.ID;
-                            else if (compName == "trajectory"   /*&& weapon->trajectory*/)     compID = weapon->trajectory.ID;
-                            else if (compName == "bitmap"       /*&& weapon->meshRenderer2d*/) compID = weapon->meshRenderer2d.ID;
-                            else if (compName == "dynamicModel" /*&& weapon->dynamicModel*/)   compID = weapon->dynamicModel.ID;
-                            else if (compName == "crossSection" /*&& weapon->crossSection*/)   compID = weapon->crossSection.ID;
-                            else continue;
-                            emit hierarchy->componentAdded(
-                                weaponQID,
-                                QString::fromStdString(compID),
-                                QString::fromStdString(compName));
-                        }
+                    for (int i = 0; i < count; ++i) {
+                        const QString nm = (count == 1)
+                                               ? weaponName
+                                               : QString("%1-%2").arg(weaponName).arg(i + 1);
+                        hierarchy->addSubComponent(QString::fromStdString(platform->weapons.ID),
+                                                   nm, typeName, selectedId, obj);
                     }
                 }
             });
-
     // ── Bulk: Add Sensor ─────────────────────────────────────────────────
     connect(treeView, &HierarchyTree::addSensorToEntitiesRequested, this,
             [=](QList<QVariantMap> entities) {
                 if (entities.isEmpty()) return;
+                if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                    return;
                 Hierarchy* dbHierarchy = library ? library : hierarchy;
                 AddItemDialog dialog(AddItemDialog::EntityType, "sensors",
                                      AddItemDialog::ComponentSensorMode, dbHierarchy, treeView);
@@ -920,8 +1147,8 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                 QString sensorName = dialog.getName();
                 QString sensorType = dialog.getSensorType();
                 QString profileId  = dialog.getProfileId();
-                if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
-                    return;
+                // if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                //     return;
 
                 for (const QVariantMap& data : entities) {
                     QString entityID = data["ID"].toString();
@@ -944,6 +1171,8 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
     connect(treeView, &HierarchyTree::addIFFToEntitiesRequested, this,
             [=](QList<QVariantMap> entities) {
                 if (entities.isEmpty()) return;
+                if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                    return;
 
                 Hierarchy* dbHierarchy = library ? library : hierarchy;
                 AddItemDialog dialog(AddItemDialog::EntityType, "iffs",
@@ -953,8 +1182,8 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
 
                 QString iffName   = dialog.getName();
                 QString profileId = dialog.getProfileId();
-                if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
-                    return;
+                // if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                //     return;
 
                 for (const QVariantMap& data : entities) {
                     QString entityID = data["ID"].toString();
@@ -977,7 +1206,8 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
     connect(treeView, &HierarchyTree::addRadioToEntitiesRequested, this,
             [=](QList<QVariantMap> entities) {
                 if (entities.isEmpty()) return;
-
+                if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                    return;
                 Hierarchy* dbHierarchy = library ? library : hierarchy;
                 AddItemDialog dialog(AddItemDialog::EntityType, "radios",
                                      AddItemDialog::ComponentRadioMode, dbHierarchy, treeView);
@@ -987,8 +1217,8 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                 QString radioName = dialog.getName();
                 QString profileId = dialog.getProfileId();
                 QString radioType = dialog.getRadioType();
-                if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
-                    return;
+                // if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                //     return;
 
                 for (const QVariantMap& data : entities) {
                     QString entityID = data["ID"].toString();
@@ -1167,7 +1397,7 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                 } catch (const std::exception& e) {}
             });
 
-  // ── Tactical Display ─────────────────────────────────────────────────
+    // ── Tactical Display ─────────────────────────────────────────────────
     if (tactical) {
         connect(hierarchy, &Hierarchy::entityRemoved, tactical, &TacticalDisplay::removeMesh);
         connect(hierarchy, &Hierarchy::entityRemoved, this, [=](const QString& entityId) {
@@ -1593,6 +1823,7 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                                          "Could not add entity to formation.");
                 }
             });
+
     connect(treeView->getContextMenu(),
             &ContextMenu::breakFormationRequested,
             this, [=](const QString& formationId) {
@@ -1666,7 +1897,7 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                 targetWeapon->ID       = savedId;
                 targetWeapon->Name     = savedName;
                 targetWeapon->parentID = savedParent;
-                targetWeapon->syncComponentsFromWeaponData();
+                // targetWeapo   n->syncComponentsFromWeaponData();
             });
     connect(treeView->getContextMenu(), &ContextMenu::editMultipleSubComponentsRequested,
             this, [=](QList<QVariantMap> subComponents) {
@@ -1745,7 +1976,7 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                     w->ID       = savedId;
                     w->Name     = savedName;
                     w->parentID = savedParent;
-                    w->syncComponentsFromWeaponData();
+                    // w->syncComponentsFromWeaponData();
                 }
             });
     connect(treeView->getContextMenu(), &ContextMenu::editEntityRequested,
@@ -1833,6 +2064,7 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                     hierarchy->UpdateComponent(entityID, "_self", delta);
                 }
             });
+
     connect(treeView->getContextMenu(), &ContextMenu::editMultipleEntitiesRequested,
             this, [=](QList<QVariantMap> entitiesData) {
                 if (entitiesData.isEmpty()) return;
@@ -1908,7 +2140,7 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                         dmDelta.remove("id");
                         dmDelta.remove("type");
                         // if (targetPlatform->dynamicModel) {
-                            targetPlatform->dynamicModel.fromJson(dmDelta);
+                        targetPlatform->dynamicModel.fromJson(dmDelta);
                         // }
                     }
                     // Category + SubCategory apply
@@ -1922,7 +2154,191 @@ void HierarchyConnector::connectSignals(Hierarchy* hierarchy, Hierarchy* library
                     }
                 }
             });
+
+
+    // ── Add Entity from Shape Context Menu ─────────────────────────────
+    if (apiMapWidget && apiMapWidget->map()) {
+        MapWidget* map = apiMapWidget->map();
+
+        connect(map, &MapWidget::addEntityOnShapeRequested,
+                this, [=](const QString& shapeId, const QPointF& /*geoPos*/) {
+
+                    if (shapeId.isEmpty() || !hierarchy || !library || !treeView)
+                        return;
+                    // 1. Dialog
+
+                    if (!confirmAndLoadAssociatedDatabase(hierarchy, treeView))
+                        return;
+
+                    // 2. Dialog
+                    AddItemDialog dialog(AddItemDialog::EntityType,
+                                         "Platform",
+                                         AddItemDialog::NormalMode,
+                                         library,
+                                         treeView,
+                                         QStringLiteral("scenario"));
+                    dialog.setWindowTitle(QStringLiteral("Add Entity on Shape"));
+                    if (dialog.exec() != QDialog::Accepted || dialog.getName().isEmpty())
+                        return;
+
+                    // 2. Shape properties
+                    QJsonObject props = ShapeApi::instance()->getShapeProperties(shapeId);
+                    if (props.isEmpty())
+                        return;
+
+                    const QString shapeType = props.value(QStringLiteral("type")).toString();
+                    const double  centerLon = props.value(QStringLiteral("longitude")).toDouble();
+                    const double  centerLat = props.value(QStringLiteral("latitude")).toDouble();
+                    const double  radius    = props.value(QStringLiteral("radius")).toDouble();
+                    const double  width     = props.value(QStringLiteral("width")).toDouble();
+                    const double  height    = props.value(QStringLiteral("height")).toDouble();
+
+                    QVector<QPointF> polyPts;
+                    if (props.contains(QStringLiteral("points")) && props["points"].isArray()) {
+                        for (const QJsonValue& v : props["points"].toArray()) {
+                            QJsonArray a = v.toArray();
+                            if (a.size() >= 2)
+                                polyPts.append(QPointF(a[0].toDouble(), a[1].toDouble()));
+                        }
+                    }
+
+                    // 3. Sample inside shape
+                    auto sampleInsideShape = [&]() -> QPointF {
+                        QPointF result(centerLon, centerLat);  // fallback
+
+                        if (shapeType == QLatin1String("circle") && radius > 0.0 && map) {
+                            const QPointF centerPx = map->geoToCanvas(centerLat, centerLon);
+                            const QPointF edgePx   = map->geoToCanvas(centerLat, centerLon + radius);
+                            const double  rPx      = QVector2D(edgePx - centerPx).length();
+                            if (rPx > 1.0) {
+                                const double angle = QRandomGenerator::global()->generateDouble() * 2.0 * M_PI;
+                                const double r     = rPx * std::sqrt(QRandomGenerator::global()->generateDouble());
+                                const QPointF samplePx(centerPx.x() + r * std::cos(angle),
+                                                       centerPx.y() + r * std::sin(angle));
+                                result = map->canvasToGeo(samplePx);  // (lon, lat)
+                            }
+                        }
+                        else if (shapeType == QLatin1String("rectangle") && width > 0.0 && height > 0.0) {
+                            const double halfW = width  * 0.5;
+                            const double halfH = height * 0.5;
+                            const double dx = (QRandomGenerator::global()->generateDouble() * 2.0 - 1.0) * halfW;
+                            const double dy = (QRandomGenerator::global()->generateDouble() * 2.0 - 1.0) * halfH;
+                            result = QPointF(centerLon + dx, centerLat + dy);
+                        }
+                        else if (shapeType == QLatin1String("polygon") && polyPts.size() >= 3) {
+                            // area fill — point-in-polygon
+                            double minX = polyPts[0].x(), maxX = polyPts[0].x();
+                            double minY = polyPts[0].y(), maxY = polyPts[0].y();
+                            for (const QPointF& p : polyPts) {
+                                minX = qMin(minX, p.x()); maxX = qMax(maxX, p.x());
+                                minY = qMin(minY, p.y()); maxY = qMax(maxY, p.y());
+                            }
+                            QPolygonF poly(polyPts);
+                            for (int attempt = 0; attempt < 40; ++attempt) {
+                                const double x = minX + QRandomGenerator::global()->generateDouble() * (maxX - minX);
+                                const double y = minY + QRandomGenerator::global()->generateDouble() * (maxY - minY);
+                                if (poly.containsPoint(QPointF(x, y), Qt::OddEvenFill)) {
+                                    result = QPointF(x, y);
+                                    break;
+                                }
+                            }
+                        }
+                        else if (shapeType == QLatin1String("line") && polyPts.size() >= 2) {
+                            // ★ LINE: sample ALONG the polyline (not inside area)
+                            // polyPts = QPointF(lon, lat) per vertex
+                            QVector<double> segLen;
+                            double total = 0.0;
+                            for (int i = 0; i + 1 < polyPts.size(); ++i) {
+                                const double dx = polyPts[i + 1].x() - polyPts[i].x();
+                                const double dy = polyPts[i + 1].y() - polyPts[i].y();
+                                const double len = std::sqrt(dx * dx + dy * dy);
+                                segLen.append(len);
+                                total += len;
+                            }
+                            if (total > 1e-12) {
+                                double t = QRandomGenerator::global()->generateDouble() * total;
+                                for (int i = 0; i < segLen.size(); ++i) {
+                                    if (t <= segLen[i] || i == segLen.size() - 1) {
+                                        const double u = (segLen[i] > 1e-12) ? (t / segLen[i]) : 0.0;
+                                        const QPointF& a = polyPts[i];
+                                        const QPointF& b = polyPts[i + 1];
+                                        result = QPointF(a.x() + u * (b.x() - a.x()),
+                                                         a.y() + u * (b.y() - a.y()));
+                                        break;
+                                    }
+                                    t -= segLen[i];
+                                }
+                            } else {
+                                result = polyPts.first();  // zero-length → first point
+                            }
+                        }
+                        return result;
+                    };
+                    // 4. Create entities
+                    ProfileCategaory* profile = hierarchy->getProfileByName("Platform");
+                    const QString parentId = profile ? QString::fromStdString(profile->ID) : QString();
+                    const bool isProfileParent = true;
+
+                    int totalCount = 0;
+                    for (int s = 0; s < dialog.selectionCount(); ++s) {
+                        dialog.activateSelection(s);
+                        totalCount += dialog.getNumber();
+                    }
+                    if (totalCount <= 0)
+                        totalCount = 1;
+
+                    QProgressDialog progress(
+                        QStringLiteral("Adding Entities on Shape..."),
+                        QStringLiteral("Cancel"),
+                        0, totalCount, treeView);
+                    progress.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+                    progress.setWindowModality(Qt::WindowModal);
+                    progress.setMinimumDuration(0);
+                    progress.setValue(0);
+                    progress.show();
+                    QApplication::processEvents();
+
+                    ContextMenu* ctxMenu = treeView->getContextMenu();
+                    int done = 0;
+                    bool canceled = false;
+
+                    for (int s = 0; s < dialog.selectionCount() && !canceled; ++s) {
+                        dialog.activateSelection(s);
+                        const QString baseName = dialog.getName();
+                        const int count = dialog.getNumber();
+                        for (int i = 0; i < count; ++i) {
+                            if (progress.wasCanceled()) {
+                                canceled = true;
+                                break;
+                            }
+                            QPointF pos = sampleInsideShape();
+                            const double lat = pos.y();
+                            const double lon = pos.x();
+                            const QString entityName = (count == 1)
+                                                           ? baseName
+                                                           : QString("%1-%2").arg(baseName).arg(i + 1);
+
+                            emit ctxMenu->addEntityRequested(
+                                parentId,
+                                entityName,
+                                isProfileParent,
+                                dialog.getComponents(),
+                                &dialog,
+                                QString(),
+                                lat,
+                                lon,
+                                0.0f
+                                );
+
+                            progress.setValue(++done);
+                            QApplication::processEvents();
+                        }
+                    }
+                    progress.close();
+                });
+    }
 }
+
 // %%% Library Signal Connections %%%
 /* Connect signals for library and tree view */
 void HierarchyConnector::connectLibrarySignals(Hierarchy* library, HierarchyTree* libTree)
@@ -2079,6 +2495,7 @@ void HierarchyConnector::initializeLibraryData(Hierarchy* library)
     if (!ApplicationDialog::getGlobalDatabaseEnabled()) {
         return;
     }
+
     QString aircraftDbPath = TDFManager::instance()->getAircraftDbPath();
     QFile jsonFile(aircraftDbPath);
     if (jsonFile.open(QIODevice::ReadOnly)) {
@@ -2610,7 +3027,7 @@ bool HierarchyConnector::confirmAndLoadAssociatedDatabase(Hierarchy* targetHiera
         return true;
 
     const QString currentDbPath = mw->databaseEditor->lastSavedFilePath;
-    QString associatedDbPath = mw->associatedDatabasePathForHierarchy(targetHierarchy);
+    const QString associatedDbPath = mw->associatedDatabasePathForHierarchy(targetHierarchy);
 
     if (!currentDbPath.isEmpty() && !associatedDbPath.isEmpty()
         && QFileInfo(currentDbPath).absoluteFilePath()
@@ -2622,40 +3039,51 @@ bool HierarchyConnector::confirmAndLoadAssociatedDatabase(Hierarchy* targetHiera
         return true;
 
     if (!associatedDbPath.isEmpty() && QFileInfo::exists(associatedDbPath)) {
-        if (!currentDbPath.isEmpty()
-            && QFileInfo(currentDbPath).absoluteFilePath()
-                   == QFileInfo(associatedDbPath).absoluteFilePath()) {
-            return true;
-        }
+        const QString assocName = QFileInfo(associatedDbPath).fileName();
+        const QString currentName = currentDbPath.isEmpty()
+                                        ? QString("(none)")
+                                        : QFileInfo(currentDbPath).fileName();
 
         QMessageBox msgBox(parentWidget);
         msgBox.setWindowTitle("Load Associated Database");
         msgBox.setIcon(QMessageBox::Question);
         msgBox.setText(
-            QString("This item is sourced from the database:\n%1\n\n"
-                    "That database is not currently loaded in the Database Editor.\n"
-                    "Load it now before adding the entity / component?")
-                .arg(QFileInfo(associatedDbPath).fileName()));
-        msgBox.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
-        msgBox.setDefaultButton(QMessageBox::Ok);
+            QString("This scenario/runtime was created with the database:\n"
+                    "%1\n\n"
+                    "The Database Editor currently has a different database loaded:\n"
+                    "%2\n\n"
+                    "What would you like to do?")
+                .arg(assocName)
+                .arg(currentName));
+        msgBox.setInformativeText(
+            QString("Load %1: switches the Database Editor to %1, and the "
+                    "entity/component will be added from it.\n\n"
+                    "Keep Current: nothing is loaded, and the entity/component "
+                    "will be added from %2.")
+                .arg(assocName)
+                .arg(currentDbPath.isEmpty() ? QString("the current database")
+                                             : currentName));
 
-        if (msgBox.exec() != QMessageBox::Ok)
+        QPushButton* loadBtn = msgBox.addButton(QString("Load %1").arg(assocName),
+                                                QMessageBox::AcceptRole);
+        QPushButton* keepBtn = msgBox.addButton("Keep Current", QMessageBox::RejectRole);
+        msgBox.setDefaultButton(loadBtn);
+        msgBox.setEscapeButton(keepBtn);
+        msgBox.setWindowFlags(Qt::Dialog
+                              | Qt::CustomizeWindowHint
+                              | Qt::WindowTitleHint);
+        msgBox.exec();
+
+        if (msgBox.clickedButton() != loadBtn)
+            return true;
+
+        if (!mw->loadDatabaseIntoEditor(associatedDbPath))
             return false;
 
-        if (parentWidget) parentWidget->setEnabled(false);
-        mw->showLoadingOverlay(
-            QString("Loading Database: %1...").arg(QFileInfo(associatedDbPath).fileName()));
-        QCoreApplication::processEvents();
-
-        mw->databaseEditor->loadFromJsonFile(associatedDbPath);
         if (isScenarioHier && mw->scenarioEditor)
             mw->scenarioEditor->setLoadedDatabaseFile(associatedDbPath);
         if (isRuntimeHier && mw->runtimeEditor)
             mw->runtimeEditor->setLoadedDatabaseFile(associatedDbPath);
-
-        mw->hideLoadingOverlay();
-        if (parentWidget) parentWidget->setEnabled(true);
-
         return true;
     }
 

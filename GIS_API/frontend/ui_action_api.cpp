@@ -564,6 +564,18 @@ void UiActionApi::registerCoreActions(MapWidget* map)
             return type != QLatin1String("bitmap") && type != QLatin1String("raster_image");
         }
     });
+    // ★ NEW — Add Entity on selected shape
+    registerAction({
+        .id       = "core.ctx.add_entity",
+        .label    = "➕ Add Entity",
+        .category = UiActionCategory::ContextShape,
+        .priority = 45,          // Properties(40) ke baad, Copy(50) se pehle
+        .callback = [](const UiActionContext& ctx) {
+            if (ctx.map && !ctx.shapeId.isEmpty())
+                emit ctx.map->addEntityOnShapeRequested(ctx.shapeId, ctx.geoPos);
+        },
+        .isEnabled = shapeEnabled   // existing helper — layer editable + shapeId present
+    });
     registerAction({
         .id = "core.ctx.copy",
         .label = "📋 Copy",

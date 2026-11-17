@@ -245,7 +245,7 @@ void Trajectory::fromJson(const QJsonObject& obj) {
     if (obj.contains("Rule") && obj["Rule"].isObject()) {
         QJsonObject followruleObj = obj["Rule"].toObject();
         if (followruleObj.contains("value")){
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 4; i++) {
                 if (followRuleNames[i] == followruleObj["value"].toString().toStdString()) {
                     rule = (FollowRule)i;
                 }

@@ -147,7 +147,6 @@ void TacticalRules::setupUI()
     btnWidget->setLayout(btnRow);
     btnWidget->setStyleSheet("background-color: transparent;");
     grid->addWidget(btnWidget, 6, 0, 1, 3);
-
     mainLayout->addWidget(formWidget);
     mainLayout->addStretch();
 
@@ -166,6 +165,7 @@ void TacticalRules::setupUI()
             this, &TacticalRules::onAnyValueChanged);
     connect(formationType,           QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &TacticalRules::onAnyValueChanged);
+
 }
 
 void TacticalRules::applyStyles()
@@ -191,7 +191,6 @@ void TacticalRules::populateDropdowns()
     });
 }
 
-// ── Team data cache helpers ───────────────────────────────────────────────────
 void TacticalRules::saveCurrentTeamData()
 {
     QJsonObject obj = toJson();
@@ -210,15 +209,14 @@ void TacticalRules::loadCurrentTeamData()
         resetState();
 }
 
-// ── setForceType — called when user switches Blue/Red tab ────────────────────
+// ── setForceType — called when user switches Blue/Red tab ──────────────────
 void TacticalRules::setForceType(int forceId)
 {
     if (forceId == m_currentForce) return;
 
-    saveCurrentTeamData();   // save old team's UI state
+    saveCurrentTeamData();
     m_currentForce = forceId;
-    loadCurrentTeamData();   // load new team's UI state
-
+    loadCurrentTeamData();
     emit valueChanged(toJsonBothTeams());
 }
 
@@ -308,7 +306,6 @@ void TacticalRules::onApplyChanges()
 void TacticalRules::onResetRules()
 {
     resetState();
-    // Clear current team's cache too
     if (m_currentForce == 0) m_blueData = QJsonObject();
     else                      m_redData  = QJsonObject();
     emit valueChanged(toJsonBothTeams());

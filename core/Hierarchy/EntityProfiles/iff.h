@@ -49,6 +49,7 @@ public:
     //              interrogation response packets.
     // =========================================================================
     enum class OperationalMode { Active, Passive, Off, Simulation };
+    enum class IFFRole { Interrogator, Responder, Both };
     enum class CodeSystem { NoPulse, FivePulses, SixPulses, TwelvePulses };
     enum class EncryptionType { None, NATO, SecureID };
 
@@ -58,6 +59,8 @@ public:
         std::string mode3A = "1200"; // Civilian squawk code
         std::string mode4 = "ABCD"; // Secure IFF code
         std::string modeC = "0000"; // Altitude code
+        std::string mode5 = ""; // Simulation-only secure credential
+        std::string modeS = ""; // Mode S identifier
     };
 
     struct IFFResponse {
@@ -67,8 +70,10 @@ public:
         std::string responderName;
         std::string mode;
         std::string code;
-        float distanceMeters;
+        float distanceMeters = 0.0f;
         std::string timestamp;
+        bool valid = false;
+        bool authenticated = false;
     };
 
     struct IFFTarget {
@@ -77,11 +82,12 @@ public:
         std::string responderName;
         std::string mode;
         std::string code;
-        bool ally;
-        float radius;
-        float angle;
-        int status;
-        Platform* entity;
+        bool ally = false;
+        float radius = 0.0f;
+        float angle = 0.0f;
+        int status = 0; // 1=authenticated friendly, 0=unidentified
+        Platform* entity = nullptr;
+        bool authenticated = false; // simulated secure Mode 4/5 match
     };
 
     struct Message {
@@ -96,9 +102,21 @@ public:
     // DESCRIPTION: Physical and logical parameters governing IFF behavior.
     // =========================================================================
     Entity* parentEntity = nullptr;
-    bool transponder = true;
-    float emittingRange = 10.0f; // km
-    float emittingFrequency = 0.0f; // MHz
+    IFFRole role = IFFRole::Both; // Authoritative device role
+    bool transponder = true; // Retained for existing integration
+    bool interrogatorEnabled = true;
+    float replyFrequency = 1090.0f; // MHz
+    std::string activeIFFMode = "Mode3A";
+    // Multiple modes may be available, with activeIFFMode selecting interrogation.
+    bool enableMode1 = true;
+    bool enableMode2 = true;
+    bool enableMode3A = true;
+    bool enableModeC = true;
+    bool enableMode4 = false;
+    bool enableMode5 = false;
+    bool enableModeS = false;
+    float emittingRange = 200.0f; // km
+    float emittingFrequency = 1030.0f; // MHz
     int code = 1001;
     std::string disType;
     std::string disName;
@@ -125,7 +143,7 @@ public:
     // DESCRIPTION: Methods for active scanning and automated responding.
     // =========================================================================
     void interrogateTargets(Transform* source);
-    QJsonObject respondToInterrogation(IFF* interrogator, float distanceMeters);
+    IFFResponse respondToInterrogation(IFF* interrogator, float distanceMeters);
     void scan();
     int getIFFTargetCount() const;
 
@@ -145,6 +163,7 @@ public:
     // DESCRIPTION: Entity lifecycle and component system integration.
     // =========================================================================
     void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
     std::vector<std::string> getSupportedComponents() override;
     void addSupportedcomponent() override;
     void addComponent(std::string name) override;

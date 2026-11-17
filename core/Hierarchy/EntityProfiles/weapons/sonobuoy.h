@@ -2,6 +2,7 @@
 #define SONOBUOY_H
 
 #include "core/Hierarchy/EntityProfiles/weapon.h"
+#include <unordered_set>
 
 class Sonobuoy: public Weapon
 {
@@ -28,7 +29,6 @@ public:
     explicit Sonobuoy(Hierarchy* h);
     ~Sonobuoy();
     // WeaponType weaponType = WeaponType::Sonobuoy;
-    QString weaponTypeName() const override { return "Sonobuoy"; }
 
     bool drop = false;
     float starttime = 0;
@@ -42,8 +42,21 @@ public:
     QVector<SonobuoyOutput> detection;
 
     void dropped();
-    void Update() override;
+    void Update()override;
 
+    void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
+    std::vector<std::string> getSupportedComponents() override;
+
+    void addSupportedcomponent() override;
+
+    void addComponent(std::string name) override;
+
+    void removeComponent(std::string name) override;
+
+    QJsonObject getComponent(std::string name) override;
+
+    void updateComponent(QString name, const QJsonObject& obj) override;
 
     QJsonObject toJson()                        const override;
     void        fromJson(const QJsonObject&)          override;

@@ -133,8 +133,6 @@ void Inspector::setLocked(bool locked)
     } else {
         titleLabel->setText(titleLabel->text().remove(" (Locked)"));
     }
-
-
 }
 
 // %%% UI Setup %%%
@@ -250,10 +248,9 @@ void Inspector::handleAddTab()
 {
     emit addTabRequested();
 }
+// setupUI
 void Inspector::setupUI()
 {
-    // Inspector is now a plain QWidget. Its own title strip stays inside the content
-    // so the outer CustomResizableOverlayDock is the only window chrome.
     setStyleSheet(R"(
         QWidget {
             background-color: #0F2636;
@@ -285,12 +282,10 @@ void Inspector::setupUI()
     m_columnGripWidget->setStyleSheet("background: transparent;");
     m_columnGripWidget->installEventFilter(this);
     m_columnGripWidget->show();
-    tableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive); // ARTI CHANGE
-    tableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);      // ARTI CHANGE
-    tableWidget->horizontalHeader()->resizeSection(0, 120);                             // ARTI CHANGE
+    tableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    tableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    tableWidget->horizontalHeader()->resizeSection(0, 120);
     tableWidget->viewport()->installEventFilter(this);
-    // ARTI CHANGE: layout apply hone ke baad hi viewport ki real height milegi,
-    // isliye event-loop ke next tick pe geometry fix karo (creation-time pe height 0 hoti hai).
     QTimer::singleShot(0, this, [this]() { updateColumnGripPosition(); });
     tableWidget->setStyleSheet(InspectorStyles::TableWidget);
 
@@ -309,31 +304,7 @@ void Inspector::setupUI()
         return;
     }
 
-    // QHBoxLayout *buttonLayout = new QHBoxLayout();
-    // if (!buttonLayout) {
-    //     return;
-    // }
 
-    // QSpacerItem *spacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
-    // addButton = new QPushButton("Add", this);
-    // if (!addButton) {
-    //     delete buttonLayout;
-    //     return;
-    // }
-    // addButton->setFixedSize(40, 25);
-    // addButton->setStyleSheet(InspectorStyles::AddButton);
-    // addButton->setToolTip("Add new parameter to AdditionalParameters");
-    // addButton->setVisible(false);
-    // buttonLayout->addSpacerItem(spacer);
-    // if (!safeAddWidget(buttonLayout, addButton, "setupUI - addButton to buttonLayout")) {
-    //     delete addButton;
-    //     delete buttonLayout;
-    //     return;
-    // }
-    // buttonLayout->setSpacing(10);
-    // buttonLayout->setContentsMargins(10, 5, 10, 5);
-    // layout->addLayout(buttonLayout);
-    // Container so the bottom strip (Add button area) always has the same dark background
     QWidget *buttonContainer = new QWidget(this);
     if (!buttonContainer) {
         return;
@@ -521,6 +492,7 @@ void Inspector::handleAddParameter()
             }
         }
         m_additionalParamsHeaderRow = sectionInfo["AdditionalParameters"].headerRow;
+
     }
     const QString fullKey = QString("AdditionalParameters.%1").arg(parameterName);
     rowToKeyPath[insertRow] = fullKey;
@@ -1024,21 +996,13 @@ void Inspector::handleRemoveParameter()
 // EventFilter
 bool Inspector::eventFilter(QObject *watched, QEvent *event)
 {
-    // ARTI CHANGE: grip widget → column resize drag. Ye widget khud boundary
-    // pixels ko own karta hai, isliye neeche ke LineEdit ko event milta hi nahi.
-    // ARTI CHANGE: grip widget → column resize drag. Ye widget khud boundary
-    // pixels ko own karta hai, isliye neeche ke LineEdit ko event milta hi nahi.
     if (watched == m_columnGripWidget) {
-        // ARTI CHANGE: parent overlay docks (CustomResizableOverlayDock in
-        // ScenarioEditor/RuntimeEditor) push their own override cursor while
-        // hovering, which hides a plain setCursor() on our grip. Pushing our
-        // own override cursor guarantees SplitHCursor wins regardless.
         if (event->type() == QEvent::Enter) {
             if (!m_gripCursorOverridden) {
                 QApplication::setOverrideCursor(Qt::SplitHCursor);
                 m_gripCursorOverridden = true;
             }
-            return false; // let it propagate normally too
+            return false;
         }
         if (event->type() == QEvent::Leave) {
             if (m_gripCursorOverridden && !m_resizingColumn) {
@@ -1070,9 +1034,6 @@ bool Inspector::eventFilter(QObject *watched, QEvent *event)
         }
         if (event->type() == QEvent::MouseButtonRelease && m_resizingColumn) {
             m_resizingColumn = false;
-            // ARTI CHANGE: drag khatam hote hi override pop karo (agar mouse
-            // grip se bahar chala gaya ho to Leave event already handle kar
-            // chuka hoga; yahan safety-net hai taaki cursor stuck na rahe).
             if (m_gripCursorOverridden) {
                 QApplication::restoreOverrideCursor();
                 m_gripCursorOverridden = false;
@@ -1080,7 +1041,6 @@ bool Inspector::eventFilter(QObject *watched, QEvent *event)
             return true;
         }
     }
-    // ARTI CHANGE: window/table resize hone par grip ko boundary pe pinned rakho.
     if (watched == tableWidget->viewport()) {
         if (event->type() == QEvent::Resize) {
             updateColumnGripPosition();
@@ -1405,6 +1365,7 @@ void Inspector::init(QString ID, QString name, QJsonObject object)
         autoFitKeyColumn();
     }
 }
+
 // Add addSimpleRow
 int Inspector::addSimpleRow(int row, const QString &key, const QJsonValue &value)
 {
@@ -1468,7 +1429,7 @@ int Inspector::addSimpleRow(int row, const QString &key, const QJsonValue &value
         QString type = obj["type"].toString().toLower();
 
         if (type == "section") {
-            QCoreApplication::processEvents();
+            // QCoreApplication::processEvents();
             QString sectionKey = key;
             int headerRow = row;
             QWidget *headerWidget = createSectionHeader(sectionKey, headerRow, obj);
@@ -2061,6 +2022,7 @@ void Inspector::setupUnitParameterCell(int row, const QString &fullKey, const QJ
     bool    hasRange = !(qFuzzyIsNull(captMin) && qFuzzyIsNull(captMax));
     QString captUnit = unit;
     // ── editingFinished ───────────────────────────────────────────────────
+
     connect(valueEdit, &QLineEdit::editingFinished, this, [=]() {
         double enteredVal = valueEdit->text().toDouble();
         if (hasRange && (enteredVal < captMin || enteredVal > captMax)) {
@@ -2076,6 +2038,7 @@ void Inspector::setupUnitParameterCell(int row, const QString &fullKey, const QJ
             QToolTip::showText(QCursor::pos(), errMsg, valueEdit);
             return;
         }
+
         bool wasInError = *inErrorState;
         *inErrorState  = false;
         *lastGoodValue = formatNumberForUI(enteredVal);
@@ -2156,6 +2119,7 @@ QWidget* Inspector::createSectionHeader(const QString &sectionKey, int headerRow
         sectionLabel->setProperty("waypointIndex", wpIndex);
         sectionLabel->setProperty("isWaypointLabel", true);
     }
+
     connect(dropdownButton, &QPushButton::clicked, this, [=]() {
         toggleSectionExpansion(sectionKey, headerRow, dropdownButton);
         if (sectionKey.startsWith("Waypoint_", Qt::CaseInsensitive) && !ConnectedID.isEmpty()) {
@@ -2167,6 +2131,7 @@ QWidget* Inspector::createSectionHeader(const QString &sectionKey, int headerRow
             }
         }
     });
+
     return headerWidget;
 }
 // toggleSectionExpansion

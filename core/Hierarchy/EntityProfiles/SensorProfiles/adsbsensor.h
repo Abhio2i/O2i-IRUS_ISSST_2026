@@ -32,6 +32,14 @@ struct ADSBTarget {
     bool emergency;
     bool spi;
     bool is_on_ground;
+    int emitter_category;
+    float vx;
+    float vy;
+    float vz;
+    float ax;
+    float ay;
+    float az;
+
 };
 
 

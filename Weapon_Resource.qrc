@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/Missile">
+        <file>images/Weapon/Missile.png</file>
+    </qresource>
+    <qresource prefix="/Bomb">
+        <file>images/Weapon/bomb.png</file>
+    </qresource>
+    <qresource prefix="/rocket">
+        <file>images/Weapon/rocket.png</file>
+    </qresource>
+    <qresource prefix="/torpedo">
+        <file>images/Weapon/torpedo.png</file>
+    </qresource>
+</RCC>

@@ -179,7 +179,11 @@ void ESMDisplay::buildUi()
     hh->setHighlightSections(false);
     hh->setSectionsClickable(false);
     hh->setStretchLastSection(false);
-    hh->setMinimumSectionSize(20);
+
+    //Vansh increased the MinSecSize from 20 to 28
+    hh->setMinimumSectionSize(28);
+    //Vansh
+
     hh->setDefaultAlignment(Qt::AlignCenter);
     hh->setFixedHeight(kHeaderHeight);
 
@@ -187,19 +191,28 @@ void ESMDisplay::buildUi()
     // 0 here because they use Stretch and share whatever width is left.
     static const int widths[ESMObservationModel::ColumnCount] = {
         22,   // #
-        0,    // Platform ID  (stretch)
-        0,    // Name         (stretch)
-        34,   // Emitter ID
-        42,   // Bearing   "045.0°"
-        38,   // Range     "175.2"
-        38,   // Frequency "8000"
-        24,   // Bandwidth
-        24,   // Rx Power
-        28,   // SNR
-        30,   // Type
-        72,   // Status    "Beyond range"
-        30    // Last Seen
+        105,    // Platform ID  (stretch)
+        95,    // Platform Name         (stretch)
+        70,   // Emitter ID
+        52,   // Bearing   "045.0°"
+        40,   // Range     "175.2"
+        65,   // Frequency "8000"
+        60,   // Bandwidth
+        60,   // Rx Power
+        35,   // SNR
+        70,   // Emitter Type
+        60,   // Status    "Beyond range"
+        55    // Last Seen
     };
+
+    //Added by Vansh
+
+    // Allow manual resizing without forcing all columns
+    // to fit inside the available viewport.
+    for (int c = 0; c < ESMObservationModel::ColumnCount; ++c) {
+        hh->setSectionResizeMode(c, QHeaderView::Interactive);
+        hh->resizeSection(c, widths[c]);
+    }
     for (int c = 0; c < ESMObservationModel::ColumnCount; ++c) {
         if (c == ESMObservationModel::ColPlatformId || c == ESMObservationModel::ColName) {
             hh->setSectionResizeMode(c, QHeaderView::Stretch);

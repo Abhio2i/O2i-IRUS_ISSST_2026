@@ -2,42 +2,49 @@
 #define ROCKET_H
 
 #include "core/Hierarchy/EntityProfiles/weapon.h"
-
-class Rocket : public Weapon
+class Rocket: public Weapon
 {
     Q_OBJECT
 public:
     explicit Rocket(Hierarchy* h);
+    ~Rocket();
 
-    WeaponType weaponType = WeaponType::Rocket;
-    QString weaponTypeName() const override { return "Rocket"; }
+    float LaunchSpeed = 100.0f;          // m/s
+    float CurrentSpeed = 100.0f;         // m/s
+    float Acceleration = 20.0f;          // m/s²
+    float BurnDuration = 10.0f;          // seconds
+    float Mass = 20.0f;                  // kg
+    float DragCoefficient = 0.1f;        // dimensionless
+    float LaunchElevation = 45.0f;       // degrees
+    float LaunchAzimuth = 0.0f;          // degrees
+    float FlightTime = 0.0f;             // seconds
 
-    PropulsionType propulsionType        = PropulsionType::SolidRocket;
-    float thrustMain                     = 12000.0f;
-    float burnTime                       = 1.1f;
-    float specificImpulse                = 220.0f;
-    float calibre                        = 70.0f;
-    bool  finStabilised                  = true;
-    float dragCoefficient                = 0.35f;
-    float spinRateRPM                    = 0.0f;
-    GuidanceType guidanceType            = GuidanceType::Unguided;
-    bool         hasAdvancedPrecisionKit = false;
-    float        cep                     = 5.0f;
+    bool GravityEnabled = true;
+    bool PropulsionEnabled = true;
 
-    enum class WarheadType { HE, HEAT, Flechette, Illumination, Smoke, WP };
-    WarheadType warheadVariant = WarheadType::HE;
-    void Update() override;
-    int   salvoCount    = 1;
-    float salvoInterval = 0.05f;
-    int   podCapacity   = 19;
+    void Update()override{};
+    void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
+    std::vector<std::string> getSupportedComponents() override;
 
-    void        launch()                              override;
-    void        flyToTarget()                         override;
+    void addSupportedcomponent() override;
+
+    void addComponent(std::string name) override;
+
+    void removeComponent(std::string name) override;
+
+    QJsonObject getComponent(std::string name) override;
+
+    void updateComponent(QString name, const QJsonObject& obj) override;
+
     QJsonObject toJson()                        const override;
     void        fromJson(const QJsonObject&)          override;
-
-    QString warheadTypeToString()            const;
-    void    setWarheadTypeFromString (const QString&);
+    QJsonObject AdditionalParameters;   //!< User-defined extension parameters
+    void SaveState();
+    void RestoreState();
+private:
+    bool statesaved = false;
+    QJsonObject InitalState;
 };
 
 #endif // ROCKET_H

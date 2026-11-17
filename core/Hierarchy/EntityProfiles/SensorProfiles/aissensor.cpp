@@ -1,15 +1,61 @@
 #include "aissensor.h"
 #include "core/Hierarchy/EntityProfiles/SensorProfiles/AIS_ADSB/AIS/AIS.h"
 #include "core/Hierarchy/EntityProfiles/SensorProfiles/AIS_ADSB/RF/RF.h"
-#include "core/Hierarchy/EntityProfiles/radio.h"
 #include "core/Simulation/simulation.h"
 #include "core/Hierarchy/Utils/entityutils.h"
 #include "core/Hierarchy/hierarchy.h"
 #include <iostream>
-#include <functional>
 
 const float RAD2DEG = 180.0f / M_PI;
 rf::RfPropagationModel* AISSensor::model = nullptr;
+
+namespace {
+
+template <std::size_t N>
+void copyAisText(char (&out)[N], const std::string& value)
+{
+    const size_t length = value.size();
+
+    qDebug() << "======== AIS COPY ========";
+    qDebug() << "Array Size:" << N;
+    qDebug() << "String Size:" << length;
+    qDebug() << "Source Address:" << static_cast<const void*>(value.data());
+    qDebug() << "Destination Address:" << static_cast<const void*>(out);
+
+    if (length == 0)
+    {
+        qDebug() << "EMPTY STRING - RETURN";
+        return;
+    }
+
+    std::memset(out, 0, N);
+
+    const size_t count = std::min(length, N - 1);
+
+    qDebug() << "Copy Count:" << count;
+
+    if (count > 0)
+        std::memcpy(out, value.data(), count);
+}
+
+// `rot` is int8_t in the existing output struct. This preserves
+// deg/min as closely as possible but loses fractional resolution.
+int8_t toOutputRot(double degreesPerMinute)
+{
+    if (!std::isfinite(degreesPerMinute)) return 0;
+    return static_cast<int8_t>(std::lround(
+        std::clamp(degreesPerMinute, -128.0, 127.0)));
+}
+
+uint16_t toOutputHeading(double headingDeg)
+{
+    if (!std::isfinite(headingDeg)) return 511; // AIS heading unavailable
+    const int rounded = static_cast<int>(std::lround(headingDeg));
+    if (rounded < 0 || rounded > 359) return 511;
+    return static_cast<uint16_t>(rounded);
+}
+
+} // namespace
 
 AISSensor::AISSensor(Hierarchy* h) : Sensor(h) {
     subType = SubType::AIS;
@@ -117,7 +163,7 @@ AISSensor::AISSensor(Hierarchy* h) : Sensor(h) {
     });
 
     ownship.setReceiveCallback([this](const ais::AisReceiveReport& r) {
-        // rxEvents.append({Simulation::simulationTime, r});
+        rxEvents.append({Simulation::simulationTime, r});
     });
 
 
@@ -151,7 +197,7 @@ void AISSensor::scan(){
         ownship.configureAis(cfg);
 
         rf::RfConfig own_rf = ownship.getRfConfiguration();
-        own_rf.id = rf_id.empty() ? parentEntity->ID : rf_id;
+        own_rf.id = rf_id.empty()||rf_id == "OWN_AIS" ? parentEntity->ID : rf_id;
         own_rf.parent_name = parentEntity->Name;
         ownship.configureRf(own_rf);
     }
@@ -163,13 +209,16 @@ void AISSensor::scan(){
 
     detect.clear();
     if (!rf_hits.empty()) {
-        std::cout << " Physical RF Hits:\n";
+        // std::cout << " Physical RF Hits:\n";
         for (const auto& h : rf_hits) {
 
             AISVesselData target;
             try {
                 if ((root->Platforms)[h.id]) {
                     target.entity = (root->Platforms)[h.id];
+                    target.heading = target.entity->transform.getHeading();
+                    target.pos.latitude = target.entity->transform.getLatitude();
+                    target.pos.longitude = target.entity->transform.getLongitude();
                 }else{
                     target.entity = nullptr;
                 }
@@ -179,14 +228,51 @@ void AISSensor::scan(){
             }
             target.angle = h.azimuth_deg;//-((h.azimuth_deg+h)+180.f);
             target.radius = h.distance_m/1000.f;
-            detect.append(target);
+            auto it = std::find_if(rxEvents.begin(), rxEvents.end(),
+                                   [&h](const auto& event) {
+                                       return event.report.track.last_report.sender_id == h.id;
+                                   });
 
-            // std::cout << "  ID=" << h.id
-            //           << " Dist=" << h.distance_m
-            //           << "m Rx=" << h.rx_power_dbm
-            //           << "dBm SNR=" << h.snr_db
-            //           << "dB\n";
+            if (it == rxEvents.end()){
+
+
+            const auto& track = it->report.track;
+
+            const auto& st = track.static_data;
+            const auto& dy = track.dynamic_data;
+            target.mmsi = track.mmsi;
+            target.imo_number = st.imo;
+            // copyAisText(target.name, st.name);
+            // copyAisText(target.call_sign, st.callsign);
+            // copyAisText(target.destination, st.destination);
+
+            // AIS static dimensions are distances to bow/stern/port/starboard.
+            target.dims.length = static_cast<uint16_t>(st.dim_bow_m + st.dim_stern_m);
+            target.dims.beam = static_cast<uint16_t>(st.dim_port_m + st.dim_starboard_m);
+            target.dims.draught = static_cast<float>(st.draught_m);
+            target.ship_type = static_cast<ShipType>(st.ship_type);
+            target.positionAccuracy = track.dynamic_data.position_accuracy;
+
+            // The supplied AIS track fields do not establish a UTC timestamp.
+            // Keep zero ('unknown') until a validated report timestamp is mapped.
+            target.pos.timestamp = 0;
+
+            target.sog = static_cast<float>(dy.sog_kn);
+            target.cog = static_cast<float>(dy.cog_deg);
+
+            target.rot = toOutputRot(dy.rot_deg_per_min);
+            target.nav_status = static_cast<NavStatus>(dy.nav_status);
+
+            // These metadata fields cannot be inferred from RF scanning alone.
+            target.eta = {};
+            target.repeat_indicator = 0; // placeholder; not decoded
+            target.ais_channel = 0;       // placeholder; not decoded
+            target.is_verified = false;   // do not claim checksum validation
+            }
+            detect.append(target);
         }
+
+        rxEvents.clear();
     }
 
     // if ((Simulation::simulationTime - lastPrintTime) >= 1.0f) {

@@ -13,6 +13,7 @@ ShapeHistoryApi* ShapeHistoryApi::instance()
 ShapeHistoryApi::ShapeHistoryApi(QObject* parent)
     : QObject(parent)
 {
+
 }
 
 QJsonObject ShapeHistoryApi::stripId(const QJsonObject& obj)
@@ -40,6 +41,7 @@ void ShapeHistoryApi::appendSnapshot(const QString& shapeId, const QJsonObject& 
     while (list.size() > kMaxSnapshots)
         list.removeFirst();
     emit historyChanged(shapeId);
+
 }
 
 void ShapeHistoryApi::pushSnapshot(const QString& shapeId)
@@ -68,6 +70,7 @@ int ShapeHistoryApi::historyCount(const QString& shapeId) const
 }
 
 QJsonObject ShapeHistoryApi::lastSnapshot(const QString& shapeId) const
+
 {
     const QVector<QJsonObject> list = m_history.value(shapeId);
     if (list.isEmpty())
@@ -139,17 +142,13 @@ bool ShapeHistoryApi::restoreHistory(const QString& shapeId)
         m_previewGeom = QJsonObject();
         emit previewChanged(false, pid);
     }
-
     QVector<QJsonObject>& list = m_history[shapeId];
     if (list.isEmpty())
         return false;
-
     QJsonObject snap = list.takeLast();
     ShapeApi::instance()->updateShape(shapeId, snap);
-
     if (list.isEmpty())
         m_history.remove(shapeId);
-
     emit historyChanged(shapeId);
     return true;
 }

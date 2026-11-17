@@ -1,3 +1,4 @@
+#pragma once
 #include <cstdint>
 #include <cstring>
 #include <variant>
@@ -709,12 +710,14 @@ struct radioData {
 // AIS Data Structure
 struct aisData{
     // --- Static Information (Every 6 mins) ---
+    char aisID[30];
     uint32_t mmsi;                // Unique ID
     uint32_t imo_number;          // Official IMO ID
     char name[21];                // Vessel Name (Max 20 chars)
     char call_sign[8];            // Radio Call Sign
     char destination[21];         // Destination (Max 20 chars)
-
+    uint32_t radio_status;
+    uint32_t Maneuver_Indicator;
     struct Dimensions {
         uint16_t length;          // Meters
         uint16_t beam;            // Width in meters
@@ -722,7 +725,7 @@ struct aisData{
     } dims;
 
     ShipType ship_type;
-
+    bool positionAccuracy;
     // --- Dynamic Information (Every 2-10 seconds) ---
     struct Position {
         double latitude;          // Decimal degrees
@@ -749,6 +752,11 @@ struct aisData{
     uint8_t repeat_indicator;     // AIS Message repeat count
     uint8_t ais_channel;          // 0 for A, 1 for B
     bool is_verified;
+
+    void setID(const char* nm) {
+        strncpy(aisID, nm, sizeof(aisID) - 1);
+        aisID[sizeof(aisID) - 1] = '\0'; // Null-terminate to avoid overflow
+    }
 
     void setName(const char* nm) {
         strncpy(name, nm, sizeof(name) - 1);
@@ -798,6 +806,14 @@ struct adsbData {
     bool emergency = false;
     bool spi = false;
     bool is_on_ground = false;
+    int emitter_category;
+    float vx;
+    float vy;
+    float vz;
+    float ax;
+    float ay;
+    float az;
+
 
     void setMessageType(const char* value) {
         std::strncpy(messageType, value, sizeof(messageType) - 1);
@@ -867,7 +883,67 @@ struct iff {
 
     parameter customParams[20]; // Custom IFF parameters
 };
+// AESA Radar Data Structure (one per radar on the platform)
+struct AESARadarData
+{
+    char     radarId[64];
+    char     radarName[64];
+    int32_t  emitterIndex;
+    int32_t  mode;                    // 0 SURVEILLANCE, 1 TWS, 2 LOCK_ON
+    uint32_t lockedTargetId;          // 0 = no lock
+    double   simTime_s;
+    double   beamAz_deg, beamEl_deg;  // current beam, platform body frame
+    double   frequency_Hz, receiverBandwidth_Hz, antennaGain_dBi, beamWidth_deg;
+    double   pulseWidth_s, prf_Hz, prf2_Hz, waveformBandwidth_Hz;
+    double   dutyCycle, maxDutyCycle;
+    double   displayRange_km;
+    double   minAzimuth_deg, maxAzimuth_deg;       // array frame
+    double   minElevation_deg, maxElevation_deg;   // array frame
+    double   mountAzimuth_deg, mountElevation_deg;
+    int32_t  numElements, failedModules;
+    double   peakPowerPerElement_W, noiseFigure_dB, targetPfa;
+    int32_t  frequencyAgility;
+    double   hopStart_Hz, hopStop_Hz;
+    double   radarHeight_m, platformSpeed_m_s;
+    int32_t  contactCount;            // contacts of THIS radar in aesaContact[]
+};
 
+// AESA Radar Contact (one per detection / track)
+struct AESAContactData
+{
+    int32_t  radarIndex;              // index into aesaRadar[] of this entity
+    uint32_t targetId;                // radar target / track ID
+    char     targetEntityId[64];      // engine entity ID ("" if unknown)
+    int32_t  source;                  // 0 detection, 1 track, 2 lock-on
+
+    // ---- stage_global_struct radar fields ----
+    double   PR_rcs;
+    double   PR_vel_n_s;
+    double   PR_vel_e_w;
+    double   PR_vel_vert;
+    double   PR_acc_n_s;
+    double   PR_acc_vert;
+    double   acc_e_w;                 // not in ICD, extra
+    int32_t  rcsValid;                // always 0 for now
+    int32_t  velSource;               // 1 track (3D), 2 detection (horizontal only)
+    int32_t  accValid;
+
+    // ---- other radar data ----
+    double   range_m, azimuth_deg, elevation_deg, altitude_m;
+    double   speedOverGround_m_s, heading_deg, radialVelocity_m_s;
+    double   snr_linear, snr_dB;
+    double   Pk, cpa_distance_m, time_to_cpa_s, targetAspect_deg;
+    int32_t  validated, manoeuvring, externalTrack, ambiguous, inDopplerBlind;
+    int32_t  hitCount;
+    double   trackQuality;
+    int32_t  iffResponse;             // 0 NO_REPLY 1 FRIENDLY 2 UNKNOWN 3 HOSTILE 4 CORRUPTED
+    uint32_t iffSquawk;
+    double   iffConfidence;
+
+    // ---- target position from the radar measurement ----
+    double   lat_deg;                 // deg
+    double   lon_deg;                 // deg
+};
 // Bitmap / visual representation data
 struct bitmap {
     int width;              // Bitmap width
@@ -909,6 +985,8 @@ public:
     radioData radios[100];          // Radios attached
     aisData ais[100];
     adsbData adsb[100];
+    AESARadarData   aesaRadar[4];
+    AESAContactData aesaContact[100];
     iff iffs[5];                    // IFF systems attached
 
     int iffCount;                   // Active IFF count
@@ -916,6 +994,8 @@ public:
     int radioCount;                 // Active radio count
     int aisCount;
     int adsbCount;
+    int aesaRadarCount;
+    int aesaContactCount;
 
     void setID(const char* newID) {
         strncpy(ID, newID, sizeof(ID) - 1);

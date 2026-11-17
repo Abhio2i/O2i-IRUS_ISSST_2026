@@ -74,10 +74,12 @@
 /* Main window class for the scenario editor */
 class ApiMapToolbar;
 class ApiLayerPanel;
-class AutoScriptManager; //////////
-class TcpAutoScriptSource; ////////////
-class AutoScriptController; ////////////////
+class AutoScriptManager;
+class TcpAutoScriptSource;
+class AutoScriptController;
+// class TimeToolBar;
 class ScenarioEditor : public QMainWindow
+
 {
     Q_OBJECT
 public:
@@ -104,26 +106,26 @@ public:
     // Tactical display widget
     TacticalDisplay *tacticalDisplay;
     Hierarchy* hierarchy;
-     Console *console;
-     DesignToolBar *designToolBar;
-     ConsoleView *consoleView;
-     LayerPanel *layerPanel = nullptr;
-     CustomResizableOverlayDock *hierarchyDock;
-     CustomResizableOverlayDock *tacticalDisplayDock;
-     CustomResizableOverlayDock *consoleDock;
-     CustomResizableOverlayDock *inspectorDock;
-     CustomResizableOverlayDock *libraryDock;
-     CustomResizableOverlayDock *sidebarDock;
-     CustomResizableOverlayDock *textScriptDock;
-     CustomResizableOverlayDock *layerDock = nullptr;
-     // API GIS map
-     MapWithCanvas* m_apiMapWidget = nullptr;
-     CustomResizableOverlayDock* m_apiMapDock = nullptr;
-     ApiMapToolbar* m_apiMapToolbar = nullptr;
-     ApiLayerPanel* m_apiLayerPanel = nullptr;
-     QString m_loadedDatabaseFile;
-
-     AutoScriptController* autoScriptController = nullptr;  /////////////////
+    Console *console;
+    DesignToolBar *designToolBar;
+    // TimeToolBar   *m_timeToolBar = nullptr;
+    ConsoleView *consoleView;
+    LayerPanel *layerPanel = nullptr;
+    CustomResizableOverlayDock *hierarchyDock;
+    CustomResizableOverlayDock *tacticalDisplayDock;
+    CustomResizableOverlayDock *consoleDock;
+    CustomResizableOverlayDock *inspectorDock;
+    CustomResizableOverlayDock *libraryDock;
+    CustomResizableOverlayDock *sidebarDock;
+    CustomResizableOverlayDock *textScriptDock;
+    CustomResizableOverlayDock *layerDock = nullptr;
+    // API GIS map
+    MapWithCanvas* m_apiMapWidget = nullptr;
+    CustomResizableOverlayDock* m_apiMapDock = nullptr;
+    ApiMapToolbar* m_apiMapToolbar = nullptr;
+    ApiLayerPanel* m_apiLayerPanel = nullptr;
+    QString m_loadedDatabaseFile;
+    AutoScriptController* autoScriptController = nullptr;
 
 
 public slots:

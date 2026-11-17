@@ -102,6 +102,11 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
     m_apiMapWidget->staticCanvas()->setWorld(&hierarchy->world);
     m_apiMapWidget->dynamicCanvas()->setWorld(&hierarchy->world);
     m_apiMapWidget->editorCanvas()->setWorld(&hierarchy->world);
+    if (m_apiMapWidget && m_apiMapWidget->dynamicCanvas()) {
+        m_apiMapWidget->dynamicCanvas()->setEntityZoomScaleEnabled(
+            ApplicationDialog::getGlobalEntityZoomScale());
+    }
+
     pluginManager = runtime->pluginManager;
     SceneRenderer *renderer = runtime->scenerenderer;
     simulation = runtime->simulation;
@@ -282,7 +287,7 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
         else if (entityIds.size() == 1)
             m_apiMapWidget->editorCanvas()->selectEntityById(entityIds.first());
         else
-        m_apiMapWidget->editorCanvas()->selectEntitiesById(entityIds);
+            m_apiMapWidget->editorCanvas()->selectEntitiesById(entityIds);
     });
 
     connect(designToolBar, &DesignToolBar::selectionModeChanged,
@@ -338,7 +343,7 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
     connect(m_apiMapWidget->map(), &MapWidget::gisInteractionEnabledChanged,
             this, [this](bool enabled) {
                 if (designToolBar)
-                   designToolBar->setEnabled(!enabled);
+                    designToolBar->setEnabled(!enabled);
                 if (m_apiMapToolbar) {
                     if (QAction* gisAct = m_apiMapToolbar->gisInteractionAction()) {
                         gisAct->setVisible(true);
@@ -444,10 +449,10 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
     displayDock->setWidget(displayTabs);
     radarDisplayUI = new RadarDisplay(displayTabs);
     radarDisplayUI->setHierarchy(hierarchy);
-    displayTabs->addTab(radarDisplayUI, "Radar");
+    displayTabs->addTab(radarDisplayUI, "Generic");
     sonoBuoyDisplayUI = new SonoBuoyPanel(displayDock);
     sonoBuoyDisplayUI->setHierarchy(hierarchy);
-    displayTabs->addTab(sonoBuoyDisplayUI,"SonoBuoy");
+    displayTabs->addTab(sonoBuoyDisplayUI,"Sonobuoy");
     iffDisplayUI = new IFFDisplay(displayTabs);
     iffDisplayUI->setHierarchy(hierarchy);
     displayTabs->addTab(iffDisplayUI, "IFF");
@@ -474,7 +479,7 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
     irDisplayUI = new IRDisplay(displayTabs);
     if (hierarchy)
         irDisplayUI->setHierarchy(hierarchy);
-     displayTabs->addTab(irDisplayUI, "IR");
+    displayTabs->addTab(irDisplayUI, "IR");
 
     aisDisplayUI = new AISDisplay(displayTabs);
     aisDisplayUI->setHierarchy(hierarchy);
@@ -516,6 +521,74 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
     connect(hierarchy, &Hierarchy::entityRemoved, iffDisplayUI, &IFFDisplay::RemoveEntity);
     connect(simulation, &Simulation::Update, radioDisplayUI, &RADIODisplay::updateRadar);
     connect(hierarchy, &Hierarchy::entityRemoved, radioDisplayUI, &RADIODisplay::RemoveEntity);
+
+    connect(simulation, &Simulation::Update,&dialog,[&] {
+
+        stats.scenario="Mission_01.sc";
+        stats.status="Running";
+        stats.totalEntities=hierarchy->Platforms.size();
+        int totalsensor = hierarchy->Sensors.size();
+
+        int activeEnity = 0;
+        int destroyEntity = 0;
+        int air = 0;
+        int ground = 0;
+        int sea = 0;
+        int moving = 0;
+        int stationary = 0;
+        int airborne = 0;
+        int submerged = 0;
+        int damaged = 0;
+        int healthy = 0;
+
+        int activesensor = 0;
+        int radar = 0;
+        int sonar = 0;
+
+
+        for(const auto& entity : hierarchy->Platforms){
+        //     activeEnity += entity.second->Active?1:0;
+        //     destroyEntity += entity.second->isDestroy?1:0;
+            const auto* e = entity.second;
+            if (!e) continue;
+
+            air += entity.second->category == Entity::Category::Air?1:0;
+            ground += entity.second->category == Entity::Category::Ground?1:0;
+            sea += entity.second->category == Entity::Category::Marine?1:0;
+
+            moving += entity.second->dynamicModel.currentSpeed>1?1:0;
+            stationary += entity.second->dynamicModel.currentSpeed<1?1:0;
+            airborne += entity.second->dynamicModel.currentAltitude>0.03?1:0;
+            submerged += entity.second->dynamicModel.currentAltitude<-0.03?1:0;
+
+            damaged += entity.second->Health < 20?1:0;
+            healthy += entity.second->Health > 20?1:0;
+        }
+
+        for(const auto& entity : hierarchy->Sensors){
+            activesensor += entity.second->Active?1:0;
+            radar += entity.second->subType == Sensor::SubType::AESA?1:0;
+            sonar += entity.second->subType == Sensor::SubType::Sonar?1:0;
+        }
+
+        stats.activeEntities=activeEnity;
+        stats.destroyedEntities=destroyEntity;
+        stats.distribution={air,ground,sea,0,0};
+        stats.operational={moving,stationary,airborne,submerged,damaged,healthy};
+        stats.sensors={totalsensor,activesensor,radar,sonar,0,0};
+        stats.tickDurationMs=4.2;
+        dialog.updateStatistics(stats);
+        stats.sampleTimeSeconds+=0.5;
+
+        int totalMs=int(stats.sampleTimeSeconds*1000);
+        stats.simulationTime=QString("%1:%2:%3.%4")
+                                   .arg(totalMs/3600000,2,10,QChar('0'))
+                                   .arg((totalMs/60000)%60,2,10,QChar('0'))
+                                   .arg((totalMs/1000)%60,2,10,QChar('0'))
+                                   .arg(totalMs%1000,3,10,QChar('0'));
+        stats.tickDurationMs=4.2+0.5*qSin(stats.sampleTimeSeconds);
+        dialog.updateStatistics(stats);
+    });
 
     //by Aman
     connect(simulation, &Simulation::Update,
@@ -569,26 +642,26 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
             [this](const QString &entityId,
                    const QString &sensorId)
             {
-                qDebug() << "[RuntimeEditor] Sensor removed:"
-                         << entityId
-                         << sensorId;
+                // qDebug() << "[RuntimeEditor] Sensor removed:"
+                //          << entityId
+                //          << sensorId;
 
                 if (runtime && runtime->scriptengine) {
                     runtime->scriptengine->stopScript();
                 }
             });
 
-        connect(hierarchy, &Hierarchy::entityRemoved, sonarDisplayUI, &SonarDisplay::RemoveEntity);     // add by amjad
-        connect(displayDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-            if (!visible) {
-                if (runtimeToolBar) {
-                    QAction* radarToggle = runtimeToolBar->findChild<QAction*>("radarToggleAction");
-                    if (radarToggle) {
-                        radarToggle->setChecked(false);
-                    }
+    connect(hierarchy, &Hierarchy::entityRemoved, sonarDisplayUI, &SonarDisplay::RemoveEntity);
+    connect(displayDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+        if (!visible) {
+            if (runtimeToolBar) {
+                QAction* radarToggle = runtimeToolBar->findChild<QAction*>("radarToggleAction");
+                if (radarToggle) {
+                    radarToggle->setChecked(false);
                 }
             }
-        });
+        }
+    });
 
     displayDock->hide();
     connect(hierarchy, &Hierarchy::Init, runtimeToolBar, &RuntimeToolBar::Init);
@@ -737,7 +810,6 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
                 m_apiMapWidget->editorCanvas()->setSimulationRunning(false);
         });
         connect(runtimeToolBar, &RuntimeToolBar::resetTriggered, this, [=]() {
-            qDebug() << "=== Runtime Reset Started ===";
 
             // ── UI block karo - transparent overlay ──
             QWidget *blocker = new QWidget(this);
@@ -863,6 +935,18 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
         });
     } else {
     }
+
+    connect(runtimeToolBar, &RuntimeToolBar::statisticsTriggered, this, [this]() {
+        if (dialog.isVisible()) {
+            dialog.raise();
+            dialog.activateWindow();
+            return;
+        }
+        dialog.show();
+        dialog.raise();
+        dialog.activateWindow();
+    });
+
     connect(RecentProjectsManager::instance(), &RecentProjectsManager::projectSelected,
             this, [=](const QString& filePath, RecentProjectsManager::EditorType type) {
                 if (type == RecentProjectsManager::RuntimeEditor) {
@@ -975,7 +1059,7 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
                 if (!displayDock || !displayDock->isLocked()) {
                     QString category = entity->toJson()["Category"].toObject()["value"].toString();
                     // filterSensorTabsForEntity(entityId, category);
-                 updateSensorsDialogTitle("Sensors - " + displayName);
+                    updateSensorsDialogTitle("Sensors - " + displayName);
 
                     if (radarDisplayUI)       radarDisplayUI->selectEntity(entity);
                     if (sonoBuoyDisplayUI)    sonoBuoyDisplayUI->selectEntity(entity);
@@ -1010,6 +1094,8 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
         QString name = data["name"].toString();
         QString ID = data["parentId"].toString();
         QString displayName = capitalizeFirstLetter(name);
+        if (!hierarchy || !hierarchy->itemExists(type, data["ID"].toString(), data["parentId"].toString()))
+            return;
         // ===== INSPECTOR UPDATE =====
         if (!inspectorDock->isLocked()) {
             for (Inspector* inspector : inspectors) {
@@ -1099,7 +1185,6 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
                 }
             }
         }
-
         // ===== SHOW INSPECTOR DOCK IF NEEDED =====
         bool anyDockVisible = (displayDock && displayDock->isVisible()) ||
                               (libraryDock && libraryDock->isVisible()) ||
@@ -1113,8 +1198,6 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
             inspectorDock->show();
             inspectorDock->raise();
         }
-
-
         if (tacticalDisplay && type == "entity") {
             tacticalDisplay->canvas->clearSonobuoyHighlight();
             tacticalDisplay->selectedMesh(data["ID"].toString());
@@ -1129,7 +1212,6 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
                     }
                 }
             }
-
             // ── Sonobuoy check ──────────────────────────────────────
             QString subId = data["ID"].toString();
             bool isSonobuoy = false;
@@ -1139,7 +1221,6 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
                     isSonobuoy = dynamic_cast<Sonobuoy*>(wIt->second) != nullptr;
                 }
             }
-
             if (isSonobuoy && tacticalDisplay->canvas) {
                 tacticalDisplay->canvas->highlightSonobuoy(subId);
             } else {
@@ -1208,7 +1289,6 @@ RuntimeEditor::RuntimeEditor(QWidget *parent)
                     entityIds.append(parentId);
             }
         }
-
         if (!m_apiMapWidget || !m_apiMapWidget->editorCanvas())
             return;
 
@@ -2175,7 +2255,7 @@ void RuntimeEditor::setupEnhancedDockWidgets()
 
     radarDisplayUI = new RadarDisplay(displayTabs);
     if (hierarchy) radarDisplayUI->setHierarchy(hierarchy);
-    displayTabs->addTab(radarDisplayUI, "Radar");
+    displayTabs->addTab(radarDisplayUI, "Generic");
 
     iffDisplayUI = new IFFDisplay(displayTabs);
     if (hierarchy) iffDisplayUI->setHierarchy(hierarchy);
@@ -2588,7 +2668,7 @@ void RuntimeEditor::toggleLoggerDisplay(bool checked)
     }
     QDialog *loggerDlg = new QDialog(this);
     loggerDlg->setWindowTitle("Logger");
-        loggerDlg->setAttribute(Qt::WA_DeleteOnClose);
+    loggerDlg->setAttribute(Qt::WA_DeleteOnClose);
     loggerDlg->setWindowFlags(Qt::Window |
                               Qt::WindowTitleHint |
                               Qt::WindowSystemMenuHint |
@@ -2714,7 +2794,7 @@ void RuntimeEditor::setupToolBars()
             libDialog->setWindowTitle(currentTitle.isEmpty() ? "Library" : currentTitle);
 
             libDialog->setAttribute(Qt::WA_DeleteOnClose);
-       makeDialogResizable(libDialog);
+            makeDialogResizable(libDialog);
             libDialog->resize(350, 600);
             QVBoxLayout *layout = new QVBoxLayout(libDialog);
             layout->setContentsMargins(0, 0, 0, 0);
@@ -2765,7 +2845,7 @@ void RuntimeEditor::setupToolBars()
             QDialog *tsDialog = new QDialog(this);
             tsDialog->setWindowTitle("TestScript");
             tsDialog->setAttribute(Qt::WA_DeleteOnClose);
-         makeDialogResizable(tsDialog);
+            makeDialogResizable(tsDialog);
             tsDialog->resize(450, 600);
             QVBoxLayout *layout = new QVBoxLayout(tsDialog);
             layout->setContentsMargins(4, 4, 4, 4);
@@ -3346,6 +3426,12 @@ void RuntimeEditor::showApplicationDialog()
             m_apiMapWidget->dynamicCanvas()->setImageScale(px);
     });
 
+    if (m_apiMapWidget && m_apiMapWidget->dynamicCanvas()) {
+        connect(&dialog, &ApplicationDialog::entityZoomScaleState,
+                m_apiMapWidget->dynamicCanvas(),
+                &DynamicCanvas::setEntityZoomScaleEnabled);
+    }
+
     dialog.exec();
 }
 void RuntimeEditor::triggerSidebarView(const QString &viewName)
@@ -3511,7 +3597,7 @@ void RuntimeEditor::createDuplicateSensorsWindow()
 {
     CustomResizableOverlayDock *dupDock = new CustomResizableOverlayDock("Sensors - Copy", this);
     dupDock->enableLockButton();
-        dupDock->setCustomResizeEnabled(false);
+    dupDock->setCustomResizeEnabled(false);
     dupDock->setFloating(true);
     dupDock->setParent(this);
     dupDock->setWindowFlags(Qt::Window |
@@ -3552,7 +3638,7 @@ void RuntimeEditor::createDuplicateSensorsWindow()
     SonarDisplay *dupSonar = new SonarDisplay(dupTabs);  dupSonar->setHierarchy(hierarchy);
 
     // ── Saare tabs pehle add karo  ──
-    dupTabs->addTab(dupRadar,  "Radar");
+    dupTabs->addTab(dupRadar,  "Generic");
     dupTabs->addTab(dupIff,    "IFF");
     dupTabs->addTab(dupRadio,  "RADIO");
     dupTabs->addTab(dupEsm,    "ESM");
@@ -3576,7 +3662,7 @@ void RuntimeEditor::createDuplicateSensorsWindow()
     connect(simulation, &Simulation::Update, dupAis,    &AISDisplay::updateRadar);
     connect(simulation, &Simulation::Update, dupAdsb,   &ADSBDisplay::updateRadar);
     connect(simulation, &Simulation::Update, dupAesa,   &AESARadarDisplay::updateRadar);
-   // connect(simulation, &Simulation::Update, dupSonar,  &SonarDisplay::updateRadar);
+    // connect(simulation, &Simulation::Update, dupSonar,  &SonarDisplay::updateRadar);
     connect(simulation, &Simulation::Update, dupSonar, &SonarDisplay::onSimulationUpdate);
 
     // ── Entity removed connections ──
@@ -3615,7 +3701,7 @@ void RuntimeEditor::createDuplicateSensorsWindow()
         }
         Entity* entity = hierarchy->Entities[entityId.toStdString()];
         static const QMap<QString, QString> sensorTypeToTab = {
-            {"Radar", "Radar"}, {"AESA", "AESA"}, {"ESM", "ESM"},
+            {"Generic", "Generic"}, {"AESA", "AESA"}, {"ESM", "ESM"},
             {"CSM", "CSM"}, {"EO", "EO"}, {"IR", "IR"}, {"AIS", "AIS"},
             {"ADSB", "ADSB"}, {"Sonar", "SONAR"}
         };
@@ -3644,7 +3730,7 @@ void RuntimeEditor::createDuplicateSensorsWindow()
         while (dupTabs->count() > 0)
             dupTabs->removeTab(0);
         static const QStringList tabOrder = {
-            "Radar", "IFF", "RADIO", "ESM", "CSM", "EO", "IR",
+            "Generic", "IFF", "RADIO", "ESM", "CSM", "EO", "IR",
             "AIS", "ADSB", "AESA", "SONAR"
         };
         int newCurrentIndex = -1;
@@ -3652,7 +3738,7 @@ void RuntimeEditor::createDuplicateSensorsWindow()
             if (!attachedTabs.contains(tabName))
                 continue;
             QWidget *widget = nullptr;
-            if (tabName == "Radar") widget = dupRadar;
+            if (tabName == "Generic") widget = dupRadar;
             else if (tabName == "IFF") widget = dupIff;
             else if (tabName == "RADIO") widget = dupRadio;
             else if (tabName == "ESM") widget = dupEsm;
@@ -3816,7 +3902,7 @@ void RuntimeEditor::filterSensorTabsByCategory(const QString &category)
 //         return;
 //     }
 //     static const QMap<QString, QString> sensorTypeToTab = {
-//         {"Radar", "Radar"}, {"AESA", "AESA"}, {"ESM", "ESM"},
+//         {"Generic", "Generic"}, {"AESA", "AESA"}, {"ESM", "ESM"},
 //         {"CSM", "CSM"}, {"EO", "EO"}, {"IR", "IR"}, {"AIS", "AIS"},
 //         {"ADSB", "ADSB"}, {"Sonar", "SONAR"},{"Sunobuoy","Sonobuoy"}
 //     };
@@ -3856,14 +3942,14 @@ void RuntimeEditor::filterSensorTabsByCategory(const QString &category)
 //     while (displayTabs->count() > 0)
 //         displayTabs->removeTab(0);
 //     static const QStringList tabOrder = {
-//         "Radar", "Sonobuoy" ,"IFF", "RADIO", "ESM", "CSM", "EO", "IR", "AIS", "ADSB", "AESA", "SONAR"
+//         "Generic", "Sonobuoy" ,"IFF", "RADIO", "ESM", "CSM", "EO", "IR", "AIS", "ADSB", "AESA", "SONAR"
 //     };
 //     int newCurrentIndex = -1;
 //     for (const QString &tabName : tabOrder) {
 //         if (!attachedTabs.contains(tabName))
 //             continue;
 //         QWidget *widget = nullptr;
-//         if      (tabName == "Radar") widget = radarDisplayUI;
+//         if      (tabName == "Generic") widget = radarDisplayUI;
 //         else if (tabName == "Sonobuoy")   widget = sonoBuoyDisplayUI;
 //         else if (tabName == "IFF")   widget = iffDisplayUI;
 //         else if (tabName == "RADIO") widget = radioDisplayUI;
@@ -3946,13 +4032,13 @@ void RuntimeEditor::openTestScriptDialog()
 
                 if (!runtime) {
                     qWarning()
-                    << "[RuntimeEditor] ERROR: runtime is null";
+                        << "[RuntimeEditor] ERROR: runtime is null";
                     return;
                 }
 
                 if (!runtime->scriptengine) {
                     qWarning()
-                    << "[RuntimeEditor] ERROR: scriptengine is null";
+                        << "[RuntimeEditor] ERROR: scriptengine is null";
                     return;
                 }
 
@@ -4042,7 +4128,7 @@ void RuntimeEditor::openSensorsDialog()
 
     CustomResizableOverlayDock *sensorsDock = new CustomResizableOverlayDock("Sensors", this);
     sensorsDock->enableLockButton();
-        sensorsDock->setCustomResizeEnabled(false);
+    sensorsDock->setCustomResizeEnabled(false);
     sensorsDock->setFloating(true);
     sensorsDock->setParent(this);
     sensorsDock->setWindowFlags(Qt::Window |
@@ -4051,9 +4137,9 @@ void RuntimeEditor::openSensorsDialog()
                                 Qt::WindowStaysOnTopHint |
                                 Qt::WindowMinMaxButtonsHint |
                                 Qt::WindowCloseButtonHint);
-    sensorsDock->setMinimumWidth(320);
+    sensorsDock->setMinimumWidth(420);
     sensorsDock->setMinimumHeight(400);
-    sensorsDock->resize(400, height() - 180);
+    sensorsDock->resize(450, height() - 180);
     sensorsDock->handlePos = CustomResizableOverlayDock::Left;
     sensorsDock->setStyleSheet(
         "CustomResizableOverlayDock { "
@@ -4072,11 +4158,11 @@ void RuntimeEditor::openSensorsDialog()
         );
     // + button
     QPushButton *dupBtn = new QPushButton("+");
-    dupBtn->setFixedSize(22, 22);
+    dupBtn->setFixedSize(12, 12);
     dupBtn->setToolTip("Open duplicate Sensors window");
     dupBtn->setStyleSheet(
         "QPushButton { background-color: #1A3A4F; color: #00BFFF; "
-        "border: 1px solid #00BFFF; border-radius: 3px; font-weight: bold; font-size: 14px; }"
+        "border: 1px solid #00BFFF; border-radius: 1px; font-weight: bold; font-size: 10px; }"
         "QPushButton:hover { background-color: #00BFFF; color: #0F2636; }"
         );
     tabs->setCornerWidget(dupBtn, Qt::TopRightCorner);
@@ -4097,7 +4183,7 @@ void RuntimeEditor::openSensorsDialog()
     SonarDisplay      *sonar  = new SonarDisplay(tabs);      sonar->setHierarchy(hierarchy);
 
     // Pehle saare tabs add
-    tabs->addTab(radar,  "Radar");
+    tabs->addTab(radar,  "Generic");
     tabs->addTab(sono,   "Sonobuoy");
     tabs->addTab(iff,    "IFF");
     tabs->addTab(radio,  "RADIO");
@@ -4140,7 +4226,7 @@ void RuntimeEditor::openSensorsDialog()
 
     // Filter
     auto applyFilter = [=](const QString &entityId) {
-                const QString previousTabName = tabs->tabText(tabs->currentIndex());
+        const QString previousTabName = tabs->tabText(tabs->currentIndex());
         while (tabs->count() > 0)
             tabs->removeTab(0);
 
@@ -4151,9 +4237,9 @@ void RuntimeEditor::openSensorsDialog()
 
         Entity* entity = hierarchy->Entities[entityId.toStdString()];
         static const QMap<QString, QString> sensorTypeToTab = {
-            {"Radar", "Radar"}, {"AESA", "AESA"}, {"ESM", "ESM"},
+            {"Generic", "Generic"}, {"AESA", "AESA"}, {"ESM", "ESM"},
             {"CSM", "CSM"}, {"EO", "EO"}, {"IR", "IR"}, {"AIS", "AIS"},
-            {"ADSB", "ADSB"}, {"Sonar", "SONAR"}, {"Sunobuoy", "Sonobuoy"}
+            {"ADSB", "ADSB"}, {"Sonar", "SONAR"}, {"Sonobuoy", "Sonobuoy"}
         };
 
         QStringList attachedTabs;
@@ -4169,7 +4255,12 @@ void RuntimeEditor::openSensorsDialog()
 
         sensorsMap = entityJson["weapons"].toObject()["weapons"].toObject();
         for (const QString &key : sensorsMap.keys()) {
-            QString sType = sensorsMap[key].toObject()["weaponTypeName"].toString();
+            QString sType = sensorsMap[key].toObject()["weaponType"].toString();
+            if(sType.isEmpty()){
+                QJsonObject WeaponTypeObj = sensorsMap[key].toObject()["weaponType"].toObject();
+                sType = WeaponTypeObj["value"].toString();
+            }
+            // QString sType = sensorsMap[key].toObject()["weaponTypeName"].toString();
             QString tab = sensorTypeToTab.value(sType, "");
             if (!tab.isEmpty() && !attachedTabs.contains(tab))
                 attachedTabs.append(tab);
@@ -4181,7 +4272,7 @@ void RuntimeEditor::openSensorsDialog()
             attachedTabs.append("RADIO");
 
         static const QStringList tabOrder = {
-            "Radar", "Sonobuoy", "IFF", "RADIO", "ESM", "CSM",
+            "Generic", "Sonobuoy", "IFF", "RADIO", "ESM", "CSM",
             "EO", "IR", "AIS", "ADSB", "AESA", "SONAR"
         };
 
@@ -4189,7 +4280,7 @@ void RuntimeEditor::openSensorsDialog()
             if (!attachedTabs.contains(tabName)) continue;
 
             QWidget *w = nullptr;
-            if      (tabName == "Radar")    w = radar;
+            if      (tabName == "Generic")    w = radar;
             else if (tabName == "Sonobuoy") w = sono;
             else if (tabName == "IFF")      w = iff;
             else if (tabName == "RADIO")    w = radio;
@@ -4297,7 +4388,7 @@ void RuntimeEditor::openSensorsDialog()
     QScreen *screen = QGuiApplication::primaryScreen();
     if (screen) {
         QRect geo = screen->availableGeometry();
-        sensorsDock->setGeometry(geo.x() + 80, geo.y() + 100, 420, 620);
+        sensorsDock->setGeometry(geo.x() + 80, geo.y() + 100, 450, 620);
     }
     connect(sensorsDock, &QObject::destroyed, this, [=]() {
         if (runtimeToolBar) {

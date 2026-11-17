@@ -104,11 +104,13 @@
 #include "esm.h"
 #include "core/Hierarchy/Utils/entityutils.h"
 #include "core/Hierarchy/hierarchy.h"
-#include "core/Hierarchy/EntityProfiles/SensorProfiles/ESM/esmemitters.h"        #(Vansh)
+#include "core/Hierarchy/EntityProfiles/SensorProfiles/ESM/esmemitters.h"        //#(Vansh)
+#include "core/Hierarchy/EntityProfiles/SensorProfiles/radar.h"                  //#(Vansh)
+#include "core/Hierarchy/EntityProfiles/SensorProfiles/aesaradar.h"              //#(Vansh)
 #include <QDebug>
 #include <QHash>
 #include <cmath>
-#include <typeinfo>  #Vansh
+#include <typeinfo>  //#Vansh
 
 namespace {
 constexpr double kDeg2Rad = M_PI / 180.0;
@@ -123,6 +125,102 @@ double initialBearingDeg(double lat1, double lon1, double lat2, double lon2)
     const double x = std::cos(p1) * std::sin(p2) - std::sin(p1) * std::cos(p2) * std::cos(dl);
     return std::atan2(y, x) * kRad2Deg;
 }
+
+//Vansh added helper function for Radar beam direction checker
+
+constexpr qint64 kBeamHoldMs = 2000;
+
+bool esmInsideRadarAzimuthBeam(
+    const Sensor* emitter,
+    const Platform* radarPlatform,
+    double radarLat,
+    double radarLon,
+    double esmLat,
+    double esmLon)
+{
+    if (!emitter || !radarPlatform)
+        return false;
+
+    double beamAzimuth = 0.0;
+    double beamWidth = 0.0;
+
+    //Added by Vansh
+    bool beamAzimuthIsBodyRelative = false;
+    //Vansh
+
+    // Legacy Radar
+    if (const auto* radar = dynamic_cast<const Radar*>(emitter))
+    {
+        const RadarConfig cfg = radar->getRadarConfig();
+
+        beamAzimuth = radar->getCurrentAzimuth();
+        beamWidth = cfg.beamWidth;
+
+        //Vansh
+        beamAzimuthIsBodyRelative = false;
+        //Vansh
+    }
+    // AESA Radar
+    else if (const auto* aesa =
+             dynamic_cast<const AESARadar*>(emitter))
+    {
+        const aesa::RadarConfig cfg = aesa->getRadarConfig();
+
+        beamAzimuth = aesa->getCurrentAzimuth();
+        beamWidth = cfg.beamWidth;
+
+        //Vansh
+        beamAzimuthIsBodyRelative = true;
+        //Vansh
+    }
+    else
+    {
+        // Unknown RF emitter: preserve its existing behaviour.
+        return true;
+    }
+
+    const double heading =
+        radarPlatform->dynamicModel.TrueHeading;
+
+    // Reject invalid directional information.
+    if (!std::isfinite(heading) ||
+        !std::isfinite(beamAzimuth) ||
+        !std::isfinite(beamWidth) ||
+        beamWidth <= 0.0 ||
+        beamWidth > 360.0)
+    {
+        return false;
+    }
+
+    // A 360-degree beam is omnidirectional.
+    if (beamWidth >= 360.0)
+        return true;
+
+    // Bearing from RADAR towards ESM.
+    const double bearingToESM =
+        initialBearingDeg(
+            radarLat, radarLon,
+            esmLat, esmLon);
+
+    // Convert body-relative beam azimuth to world bearing.
+    // const double beamTrueBearing =
+    //     heading + beamAzimuth;
+
+    const double beamTrueBearing =
+        beamAzimuthIsBodyRelative
+            ? heading + beamAzimuth
+            : beamAzimuth;
+
+    // Shortest angular difference, including 0/360 wraparound.
+    const double delta =
+        std::remainder(
+            bearingToESM - beamTrueBearing,
+            360.0);
+
+    // Beamwidth is the FULL angular width.
+    return std::fabs(delta) <= (beamWidth * 0.5);
+}
+//Vansh
 
 double altitudeMetres(Platform* p)
 {
@@ -139,6 +237,10 @@ ESM::ESM(Hierarchy* h) : Sensor(h)
 {
     subType = SubType::ESM;
     azimuth = 360;
+
+    //Added by Vansh to start the clock here
+    beamClock_.start();
+    //Vansh
 }
 
 void ESM::clearOutputs()
@@ -147,6 +249,10 @@ void ESM::clearOutputs()
     ewdetects.clear();
     specPsdDbm_.clear();   // never leave a stale spectrum looking live
     specAcc_.reset();
+
+    //added by Vansh to clear cache
+    beamHitMs_.clear();
+    //Vansh
 }
 
 void ESM::scan()
@@ -164,7 +270,6 @@ void ESM::scan()
 
     detect.clear();
     ewdetects.clear();
-    /*QHash<const Platform*, int> indexByPlatform;*/     // one observation per platform
     QVector<esmrf::SpectrumContribution> specEmitters;
 
     for (auto& [key, emitter] : root->Sensors)
@@ -173,35 +278,15 @@ void ESM::scan()
         if (!emitter->parentEntity->Active || !emitter->Active) continue;
         if (emitter->parentEntity->ID == parentEntity->ID) continue;
 
-        // Emitter identification: explicit RF interface (any subtype), or legacy Generic.
-        // const IRFEmitter* rfIf = dynamic_cast<const IRFEmitter*>(emitter);
-        // const bool legacyGeneric = (emitter->subType == Sensor::SubType::Generic);
-        // if (!rfIf && !(legacyGeneric && rx.legacyGenericDetection)) continue;
-
-        //Vansh
         RFEmitterParams ep;
         const EsmEmitterQuery q = esmQueryEmitter(emitter, ep);
 
-        //Vansh
-        qDebug() << "[ESM-QUERY]"
-                 << "Emitter:" << QString::fromStdString(emitter->Name)
-                 << "Query:" << int(q)
-                 << "Emitting:" << ep.emitting
-                 << "Frequency MHz:" << ep.frequencyMHz
-                 << "Receiver band:" << rx.fMinMHz << "-" << rx.fMaxMHz;
-
-        //Vansh
         static int dbgTick = 0;
         const bool dbg = (dbgTick++ % 200) == 0;
         if (dbg) qDebug() << "[ESM] emitter" << QString::fromStdString(emitter->Name)
                      << typeid(*emitter).name() << "query=" << int(q);
 
-        // const bool legacyGeneric = (emitter->subType == Sensor::SubType::Generic);
-        // if (q == EsmEmitterQuery::Unavailable) continue;                       // RF sensor, no data
-        // if (q == EsmEmitterQuery::NotApplicable && !(legacyGeneric && rx.legacyGenericDetection)) continue;
-
-        // Emitter-level ESM: process only emitters with usable RF parameters.
-        // Do not create geometric-only detections for generic platforms. (Vansh)
+        // Process only emitters with usable RF parameters.
         if (q != EsmEmitterQuery::Ok)
             continue;
 
@@ -216,7 +301,7 @@ void ESM::scan()
         const double lon2 = platform->transform.getLongitude();
         if (!std::isfinite(lat2) || !std::isfinite(lon2)) continue;
 
-        const double distanceKm = distanceBetween(lat1, lon1, lat2, lon2) / 1000.0;  // m -> km
+        const double distanceKm = distanceBetween(lat1, lon1, lat2, lon2) / 1000.0;
         if (!std::isfinite(distanceKm)) continue;
 
         const double configuredRangeKm = static_cast<double>(range);
@@ -232,58 +317,64 @@ void ESM::scan()
 
         if (distanceKm > configuredRangeKm)
             continue;
-        // ESMTarget t;
-        // t.entity = platform;
-        // t.angle  = initialBearingDeg(lat1, lon1, lat2, lon2);
-        // t.radius = distanceKm;
 
         ESMTarget t;
         t.entity = platform;
         t.angle  = initialBearingDeg(lat1, lon1, lat2, lon2);
         t.radius = distanceKm;
 
-        // Preserve the identity of the actual emitter sensor.
-        t.emitterSensorId =
-            QString::fromStdString(emitter->ID);
+        t.emitterSensorId   = QString::fromStdString(emitter->ID);
+        t.emitterSensorName = QString::fromStdString(emitter->Name);
 
-        t.emitterSensorName =
-            QString::fromStdString(emitter->Name);
-
-        // if (rfIf) {
-        //     RFEmitterParams ep;
-        //     if (!rfIf->rfEmitterParams(ep) || !ep.emitting) continue;
-
-        //Vansh
         if (q == EsmEmitterQuery::Ok) {
             if (!ep.emitting) continue;
 
             const double horizonKm = rx.enableHorizon
-                                         ? esmrf::losHorizonKm(ownAltM, altitudeMetres(platform), rx.earthRadiusFactor) : -1.0;
+                                         ? esmrf::losHorizonKm(ownAltM, altitudeMetres(platform), rx.earthRadiusFactor)
+                                         : -1.0;
             const esmrf::RFLink link = esmrf::computeLink(ep, distanceKm, rx, horizonKm);
 
-            //Vansh
             if (dbg) qDebug() << "[ESM]   reason=" << int(link.reason)
                          << "Pr=" << link.rxPowerDbm
                          << "SNR=" << link.snrDb;
 
-            // Present, in-band, line-of-sight signals shape the spectrum even when too weak to detect.
-            if (link.reason != esmrf::LinkReason::InvalidInput &&
-                link.reason != esmrf::LinkReason::OutOfBand &&
-                link.reason != esmrf::LinkReason::BeyondHorizon)
-                specEmitters.append({ ep.frequencyMHz, ep.bandwidthHz, link.rxPowerDbm });
+            // ---------------------------------------------------------
+            // Same gate for spectrum AND detect (table + PPI).
+            // Only true detections enter both lists → counts stay equal.
+            // ---------------------------------------------------------
+            if (!link.detected) {
+                beamHitMs_.remove(QString::fromStdString(emitter->ID));
+                continue;
+            }
 
-            //Vansh
-            qDebug() << "[ESM-SPECTRUM-CONTRIBUTION]"
-                     << "Frequency MHz:" << ep.frequencyMHz
-                     << "Bandwidth Hz:" << ep.bandwidthHz
-                     << "Received power dBm:" << link.rxPowerDbm;
-            //Vansh
+            // MainBeam: require geometric illumination (or short hold).
+            if (rx.gainMode == GainMode::MainBeam)
+            {
+                const QString emitterKey = QString::fromStdString(emitter->ID);
+                const qint64 nowMs = beamClock_.elapsed();
 
-            if (!link.detected) continue;
+                const bool beamHitNow =
+                    esmInsideRadarAzimuthBeam(emitter, platform, lat2, lon2, lat1, lon1);
+
+                if (beamHitNow) {
+                    beamHitMs_.insert(emitterKey, nowMs);
+                } else {
+                    const auto it = beamHitMs_.constFind(emitterKey);
+                    if (it == beamHitMs_.constEnd() ||
+                        (nowMs - it.value()) > kBeamHoldMs)
+                    {
+                        beamHitMs_.remove(emitterKey);
+                        continue;
+                    }
+                }
+            }
+
+            // Accepted → contributes to spectrum AND observation list.
+            specEmitters.append({ ep.frequencyMHz, ep.bandwidthHz, link.rxPowerDbm });
 
             t.emitterValid = true;
             t.emitterid    = ep.emitterId ? ep.emitterId : deriveEmitterId(emitter->ID);
-            t.frequencyMHz = ep.frequencyMHz;        // NOMINAL, not measured
+            t.frequencyMHz = ep.frequencyMHz;
             t.emitterType  = ep.typeLabel;
             t.rfValid      = true;
             t.bandwidthHz  = ep.bandwidthHz;
@@ -291,29 +382,20 @@ void ESM::scan()
             t.snrDb        = link.snrDb;
             t.pathLossDb   = link.pathLossDb;
         }
-        // else: legacy Generic -> geometric-only target, RF fields stay invalid
 
-        // auto dup = indexByPlatform.find(platform);   // duplicate suppression per platform
-        // if (dup == indexByPlatform.end()) {
-        //     indexByPlatform.insert(platform, detect.size());
-        //     detect.append(t);
-        // } else {
-        //     ESMTarget& old = detect[dup.value()];
-        //     if (t.rfValid && (!old.rfValid || t.snrDb > old.snrDb)) old = t;
-        // }
-
-        // Each detected emitter gets its own observation.
-        // Do not merge emitters merely because they share a platform.
         detect.append(t);
         ewdetects.insert(platform);
     }
 
-    //Vansh
-    qDebug() << "[ESM-SPECTRUM]"
-             << "Contributions:" << specEmitters.size()
-             << "Points:" << rx.spectrumPoints
-             << "Min MHz:" << rx.fMinMHz
-             << "Max MHz:" << rx.fMaxMHz;
+    // Remove expired beam-hit entries.
+    const qint64 nowMs = beamClock_.elapsed();
+    for (auto it = beamHitMs_.begin(); it != beamHitMs_.end(); )
+    {
+        if ((nowMs - it.value()) > kBeamHoldMs)
+            it = beamHitMs_.erase(it);
+        else
+            ++it;
+    }
 
     QVector<double> f, p;
     if (esmrf::synthesizeSpectrum(rx, specEmitters, f, p)) {
@@ -325,7 +407,6 @@ void ESM::scan()
         specPsdDbm_.clear();
     }
 }
-
 QJsonObject ESM::toJson() const
 {
     QJsonObject obj;
@@ -337,8 +418,8 @@ QJsonObject ESM::toJson() const
     QJsonObject d;
     d["type"] = "Section";
     d["range"] = toParm(range, "km", 0, 500);
-    d["frequency"] = toParm(frequency, "Ghz", 0.1, 100);
-    d["azimuth"] = toParm(azimuth, "deg", 0, 360);
+    // d["frequency"] = toParm(frequency, "Ghz", 0.1, 100);
+    // d["azimuth"] = toParm(azimuth, "deg", 0, 360);
     obj["default"] = d;
 
     QJsonObject r;
@@ -362,6 +443,18 @@ QJsonObject ESM::toJson() const
     r["legacyGenericDetection"] = rx.legacyGenericDetection;
     obj["receiver"] = r;
 
+    // ===== [JAMMER] START - Added for ESM jammer, written by Aman =====
+    // Jammer section shown in the inspector.
+    QJsonObject jm;
+    jm["type"]      = "Section";
+    jm["enabled"]   = jam.enabled;
+    jm["power"]     = toParm(float(jam.powerKw),       "kW",   0,     1000,   "Jammer transmit power");
+    jm["gain"]      = toParm(float(jam.gainDbi),       "dBi", -20,    60,     "Jammer antenna gain");
+    jm["frequency"] = toParm(float(jam.centerFreqMHz), "MHz",  1,     100000, "Centre of jammed band");
+    jm["bandwidth"] = toParm(float(jam.bandwidthMHz),  "MHz",  0.001, 10000,  "Width of jammed band");
+    jm["jamRange"]  = toParm(float(jam.jamRangeKm),    "km",   0.1,   500,    "Maximum jamming range");
+    obj["jammer"] = jm;
+    // ===== [JAMMER] END =====
     QJsonObject add = AdditionalParameters;
     add["type"] = "Section";
     obj["AdditionalParameters"] = add;
@@ -383,7 +476,7 @@ void ESM::fromJson(const QJsonObject& obj)
 
             if (!d.contains(parameterName) ||
                 !d[parameterName].isObject()) {
-                return true; // Missing field: retain existing value.
+                return true;
             }
 
             const double value =
@@ -425,6 +518,29 @@ void ESM::fromJson(const QJsonObject& obj)
         }
     }
 
+    // ===== [JAMMER] START - Added for ESM jammer, written by Aman =====
+    // Read the jammer section. Placed before the receiver block because that
+    // block can return early. Old scenarios have no "jammer" section, so the
+    // jammer stays disabled for them.
+    if (obj.contains("jammer") && obj["jammer"].isObject()) {
+        const QJsonObject jo = obj["jammer"].toObject();
+        ESMJammerConfig c = jam;
+        auto num = [&](const char* k, double& v) {
+            if (jo.contains(k) && jo[k].isObject()) v = double(valueFromParm(jo[k].toObject()));
+        };
+        if (jo.contains("enabled")) c.enabled = jo["enabled"].toBool(c.enabled);
+        num("power", c.powerKw);
+        num("gain", c.gainDbi);
+        num("frequency", c.centerFreqMHz);
+        num("bandwidth", c.bandwidthMHz);
+        num("jamRange", c.jamRangeKm);
+
+        if (c.isValid()) jam = c;
+        else qWarning() << "[ESM] Invalid jammer configuration rejected; keeping previous values";
+    }
+    // ===== [JAMMER] END =====
+    if (obj.contains("AdditionalParameters"))
+        AdditionalParameters = obj["AdditionalParameters"].toObject();
     // Old scenarios have no "receiver" section -> defaults stay.
     if (obj.contains("receiver") && obj["receiver"].isObject()) {
         const QJsonObject r = obj["receiver"].toObject();
@@ -463,6 +579,5 @@ void ESM::fromJson(const QJsonObject& obj)
         if (c.isValid()) { rx = c; resetSpectrum(); }
         else qWarning() << "ESM: invalid receiver configuration rejected, keeping previous values";
     }
-    if (obj.contains("AdditionalParameters"))
-        AdditionalParameters = obj["AdditionalParameters"].toObject();
+
 }

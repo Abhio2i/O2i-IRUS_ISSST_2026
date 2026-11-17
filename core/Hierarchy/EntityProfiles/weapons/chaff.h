@@ -3,45 +3,47 @@
 
 #include "core/Hierarchy/EntityProfiles/weapon.h"
 
-class Chaff : public Weapon
+class Chaff: public Weapon
 {
     Q_OBJECT
 public:
     explicit Chaff(Hierarchy* h);
+    ~Chaff();
 
-    WeaponType weaponType = WeaponType::Chaff;
-    QString weaponTypeName() const override { return "Chaff"; }
+    float CloudRadius = 10.0f;           // meters
+    float CloudDensity = 1.0f;           // normalized (0-1)
+    float DeploymentTime = 0.0f;         // seconds
+    float ExpansionRate = 1.0f;          // m/s
+    float EffectiveLifetime = 30.0f;     // seconds
+    float RadarSignature = 1.0f;         // normalized
+    float DriftVelocity = 0.0f;          // m/s
+    float DispersionFactor = 1.0f;       // dimensionless
 
-    float dipoleCount          = 50000.0f;
-    float radarFrequencyHz     = 9.5e9f;
-    float bloomRCS             = 10000.0f;
-    float bloomRadius          = 50.0f;
-    float bloomGrowthRate      = 5.0f;
-    float bloomDecayTime       = 60.0f;
+    int ParticleCount = 100;
 
-    enum class ChaffMode { Seduction, Saturation };
-    ChaffMode chaffMode          = ChaffMode::Seduction;
-    float breakLockProbability   = 0.80f;
-    float saturationClutterDb    = 30.0f;
+    void Update()override{};
+    void spawn() override;
+    void SyncByJson(const QJsonObject& obj) override{ Q_UNUSED(obj);};
+    std::vector<std::string> getSupportedComponents() override;
 
-    enum class DispensingMode { Single, Burst, Salvo, Auto };
-    DispensingMode dispensingMode = DispensingMode::Burst;
-    int   burstCount              = 2;
-    float burstInterval           = 0.1f;
-    int   cartridgesRemaining     = 60;
-    float ejectionVelocity        = 15.0f;
-    float ejectionAngle           = 90.0f;
-    float ejectionSpread          = 20.0f;
+    void addSupportedcomponent() override;
 
-    void        launch()                              override;
-    bool        canEngage(Platform *target)           override;
+    void addComponent(std::string name) override;
+
+    void removeComponent(std::string name) override;
+
+    QJsonObject getComponent(std::string name) override;
+
+    void updateComponent(QString name, const QJsonObject& obj) override;
+
     QJsonObject toJson()                        const override;
     void        fromJson(const QJsonObject&)          override;
-    void Update() override;
-    QString chaffModeToString()              const;
-    QString dispensingModeToString()         const;
-    void    setChaffModeFromString     (const QString&);
-    void    setDispensingModeFromString(const QString&);
+    QJsonObject AdditionalParameters;   //!< User-defined extension parameters
+    void SaveState();
+    void RestoreState();
+private:
+    bool statesaved = false;
+    QJsonObject InitalState;
 };
 
 #endif // CHAFF_H

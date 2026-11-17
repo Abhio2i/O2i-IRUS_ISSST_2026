@@ -234,8 +234,10 @@ Runtime::Runtime() {
     /* -------------------------------------------------------
      * Recording Implementation Start
      * ------------------------------------------------------*/
+
     recording = recorder->m_recording;
     replay    = recorder->m_replay;
+
     //recording = new Recording(hierarchy, simulation ,recorder, this);
     // connect(simulation, &Simulation::Update,
     //         recording, &Recording::getSimulationUpdate);
@@ -244,10 +246,12 @@ Runtime::Runtime() {
         recording->getSimulationUpdate();
         hierarchy->Anlaysis();
     });
+
     connect(simulation, &Simulation::HierarchyUpdate,this,[=](){
         if(recording->mode == recording->recordingModes::START){
             recording->changeInHierarchy();
-        }else if(recording->mode == recording->recordingModes::PAUSE){
+        }
+        else if(recording->mode == recording->recordingModes::PAUSE){
             recording->changeInHierarchyInPause = true;
         }
     });
@@ -255,9 +259,11 @@ Runtime::Runtime() {
     connect(recorder,&Recorder::setSQLite,this,[=](){
         recorder->m_sqlite = sqlite->getSQLite();
     });
+
     connect(recorder,&Recorder::fileToDB, this,[=](QString path, bool &isFileSaved){
         sqlite->dbInit(path,isFileSaved);
     });
+
     connect(recorder,&Recorder::loadToDB, this,[=](QString path, bool &isFileLoaded){
         sqlite->dbConnect(path,isFileLoaded);
     });

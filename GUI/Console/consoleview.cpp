@@ -228,6 +228,7 @@ void ConsoleView::setupButtons()
     // Connect buttons to respective slots
     connect(clearButton, &QPushButton::clicked, this, &ConsoleView::clearConsole);
     connect(saveButton, &QPushButton::clicked, this, &ConsoleView::saveLog);
+
 }
 
 //============================================================================
@@ -284,7 +285,7 @@ void ConsoleView::appendDebug(const QString &text)
 
 void ConsoleView::appendWarning(const QString &text)
 {
-    appendTextToConsole(warningConsole, text, QColor(255, 165, 0)); // Orange
+    appendTextToConsole(warningConsole, text, QColor(255, 165, 0));
     if (consoleDock && consoleDock->isVisible()) {
         tabWidget->setCurrentWidget(warningConsole);
     }

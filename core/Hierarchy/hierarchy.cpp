@@ -3,8 +3,14 @@
 #include "core/Hierarchy/EntityProfiles/weapon.h"
 #include "core/Hierarchy/EntityProfiles/iff.h"
 #include "core/Hierarchy/EntityProfiles/sensor.h"
+#include "core/Hierarchy/EntityProfiles/weapons/sonobuoy.h"
 #include "core/Simulation/simulation.h"
 #include "core/Config/scenarioconfig.h"
+#include "core/Hierarchy/EntityProfiles/SensorProfiles/csm.h"
+#include "core/Hierarchy/Utils/entityutils.h"
+#include <algorithm>
+#include <cmath>
+#include <vector>
 #include <core/Debug/console.h>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -268,7 +274,6 @@ void Hierarchy::removeFolder(QString parentId, QString ID)
             it->second->removeFolder(Id);
         }
     }
-
 }
 
 /**
@@ -552,6 +557,7 @@ QJsonObject Hierarchy::getComponentData(QString ID, QString componentName)
  * @param componentName Component name (may contain "_sub" or "_self").
  * @param delta JSON object of changes.
  */
+
 void Hierarchy::UpdateComponent(QString ID, QString componentName, QJsonObject delta)
 {
     if(ID.isEmpty() || componentName.isEmpty() || delta.isEmpty()){
@@ -611,7 +617,7 @@ void Hierarchy::UpdateComponent(QString ID, QString componentName, QJsonObject d
                 }
                 if(type == "weapons"){
                     Weapon* weapon = dynamic_cast<Weapon*>(en);
-                    Weapon* newweapon = new Weapon(this);
+                    Weapon* newweapon = new Sonobuoy(this);
                     newweapon->fromJson(weapon->toJson());
                     entity->addWeapon(newweapon);
                 }
@@ -1396,6 +1402,7 @@ void Hierarchy::clear() {
     Entities.clear();
     Platforms.clear();
     Radios.clear();
+    jamSuppressedCount_ = 0;
     Sensors.clear();
     FixedPointes.clear();
     Formations.clear();
@@ -1410,6 +1417,123 @@ void Hierarchy::clear() {
     EntityPaths.clear();
     FolderPaths.clear();
 }
+
+
+namespace {
+
+struct JamSource {
+    const Platform* platform = nullptr;   // jammer's own platform (excluded from suppression)
+    double lat = 0.0, lon = 0.0;
+    double rangeM = 0.0;
+    bool   gateByFrequency = false;
+    double loHz = 0.0, hiHz = 0.0;
+};
+
+// Band a jammer can hit on this radio. false = unknown.
+bool radioBandHz(const Radio* r, double& loHz, double& hiHz)
+{
+    if (!r || !r->lib_radio) return false;
+    const radio::RadioConfig cfg = r->lib_radio->getConfiguration();
+    if (!std::isfinite(cfg.frequency_hz) || cfg.frequency_hz <= 0.0) return false;
+    const double bw = std::max(std::isfinite(cfg.bandwidth_hz)    ? cfg.bandwidth_hz    : 0.0,
+                               std::isfinite(cfg.rx_bandwidth_hz) ? cfg.rx_bandwidth_hz : 0.0);
+    loHz = cfg.frequency_hz - bw * 0.5;
+    hiHz = cfg.frequency_hz + bw * 0.5;
+    return true;
+}
+
+} // namespace
+
+void Hierarchy::updateJammingDisplaySuppression()
+{
+    // 1) Active jammers: CSM, Active + TRANSMIT + txEnabled, platform Active.
+    std::vector<JamSource> jammers;
+    for (auto const& kv : Sensors) {
+        Sensor* s = kv.second;
+        if (!s || s->subType != Sensor::SubType::CSM) continue;
+        const CSM* jam = dynamic_cast<const CSM*>(s);
+        if (!jam || !jam->isTransmitting() || !jam->parentEntity) continue;
+
+        auto pit = Platforms.find(jam->parentEntity->ID);
+        if (pit == Platforms.end() || !pit->second || !pit->second->Active) continue;
+
+        const float rangeKm = jam->effectiveJamRangeKm();
+        if (!(rangeKm > 0.0f)) continue;
+
+        JamSource j;
+        j.platform = pit->second;
+        j.lat = pit->second->transform.getLatitude();
+        j.lon = pit->second->transform.getLongitude();
+        j.rangeM = static_cast<double>(rangeKm) * 1000.0;
+        if (jam->jamFrequencyGate) {
+            if (!jam->jamBandHz(j.loHz, j.hiHz)) continue;
+            j.gateByFrequency = true;
+        }
+        jammers.push_back(j);
+    }
+
+    // Steady state: nothing jamming, nothing hidden.
+    if (jammers.empty() && jamSuppressedCount_ == 0) return;
+
+    // 2) Radios: recompute the flag from scratch (this also clears stale state).
+    int newCount = 0;
+    for (auto const& kv : Radios) {
+        Radio* r = kv.second;
+        if (!r) continue;
+
+        bool hide = false;
+        if (!jammers.empty() && r->Active && r->parentEntity) {
+            auto pit = Platforms.find(r->parentEntity->ID);
+            if (pit != Platforms.end() && pit->second && pit->second->Active) {
+                Platform* rp = pit->second;
+                const double lat = rp->transform.getLatitude();
+                const double lon = rp->transform.getLongitude();
+                double rLo = 0.0, rHi = 0.0;
+                bool   bandKnown = false, bandTried = false;
+
+                for (const JamSource& j : jammers) {
+                    if (j.platform == rp) continue;               // own platform: not jammed by itself
+                    if (distanceBetween(j.lat, j.lon, lat, lon) > j.rangeM) continue;
+                    if (j.gateByFrequency) {
+                        if (!bandTried) { bandKnown = radioBandHz(r, rLo, rHi); bandTried = true; }
+                        if (!bandKnown) continue;                 // unknown band: do not hide
+                        if (std::min(j.hiHz, rHi) < std::max(j.loHz, rLo)) continue;  // no overlap
+                    }
+                    hide = true;
+                    break;
+                }
+            }
+        }
+        r->displaySuppressedByJam = hide;
+        if (hide) ++newCount;
+    }
+
+    // Nothing hidden before or now -> platform ECS flags are already all 0.
+    if (newCount == 0 && jamSuppressedCount_ == 0) return;
+
+    // 3) Platform-level flag for the ECS map links (hidden only if ALL its radios are).
+    for (auto const& kv : Platforms) {
+        Platform* p = kv.second;
+        if (!p) continue;
+        if (auto* rd = world.GetComponent<ECS::radioComponent>(p->ecsID))
+            rd->jamHidden = allRadiosDisplaySuppressed(p) ? 1 : 0;
+    }
+    jamSuppressedCount_ = newCount;
+}
+
+void Hierarchy::clearJammingDisplaySuppression()
+{
+    for (auto const& kv : Radios)
+        if (kv.second) kv.second->displaySuppressedByJam = false;
+    for (auto const& kv : Platforms)
+        if (kv.second)
+            if (auto* rd = world.GetComponent<ECS::radioComponent>(kv.second->ecsID))
+                rd->jamHidden = 0;
+    jamSuppressedCount_ = 0;
+}
+
+
+
 QStringList Hierarchy::getAvailableSensorTypes() const
 {
     return *sensorlist ;//QStringList({"Generic", "CSM", "ESM", "EO", "IR", "Sonar", "AIS", "ADSB", "AESA"});
@@ -1498,4 +1622,38 @@ bool Hierarchy::unregisterNewDynamic(std::string name){
     }else{
         return false;
     }
+}
+bool Hierarchy::itemExists(const QString& type, const QString& ID, const QString& parentId) const
+{
+    if (type == "entity") {
+        if (ID.isEmpty()) return false;
+        auto it = Entities.find(ID.toStdString());
+        return it != Entities.end() && it->second != nullptr;
+    }
+
+    if (type == "profile") {
+        if (ID.isEmpty()) return false;
+        auto it = ProfileCategories.find(ID.toStdString());
+        return it != ProfileCategories.end() && it->second != nullptr;
+    }
+
+    if (type == "folder") {
+        if (ID.isEmpty()) return false;
+        auto it = Folders.find(ID.toStdString());
+        return it != Folders.end() && it->second != nullptr;
+    }
+
+    if (type == "component") {
+        if (parentId.isEmpty()) return false;
+        auto it = Entities.find(parentId.toStdString());
+        return it != Entities.end() && it->second != nullptr;
+    }
+
+    if (type == "subcomponent") {
+        if (parentId.isEmpty()) return false;
+        auto it = Components.find(parentId.toStdString());
+        return it != Components.end() && it->second != nullptr;
+    }
+
+    return true;
 }

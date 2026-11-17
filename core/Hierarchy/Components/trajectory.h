@@ -47,12 +47,14 @@ public:
     enum FollowRule{
         Stop,
         Reverse,
-        Short
+        Short,
+        Disappear
     };
-    const std::string followRuleNames[3] = {
+    const std::string followRuleNames[4] = {
         "Stop",
         "Reverse",
-        "Short"
+        "Short",
+        "Disappear"
     };
 
     // =========================================================================
